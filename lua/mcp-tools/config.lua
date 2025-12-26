@@ -15,13 +15,13 @@ local M = {}
 ---@type MCPToolsConfig
 M.defaults = {
   tools = {
-    dap = true,
-    diagnostics = true,
-    lsp = true,
-    undo = true,
+    dap = false,
+    diagnostics = false,
+    lsp = false,
+    undo = false,
   },
   integrations = {
-    opencode = true,
+    opencode = false,
   },
   bridge = {
     command = nil,

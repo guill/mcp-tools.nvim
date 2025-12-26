@@ -45,9 +45,11 @@ use {
 
 ## Configuration
 
+All tools and integrations are **disabled by default**. Enable what you need:
+
 ```lua
 require("mcp-tools").setup({
-  -- Enable/disable built-in tools
+  -- Enable/disable built-in tools (all default to false)
   tools = {
     dap = true,         -- Debug Adapter Protocol tools
     diagnostics = true, -- LSP diagnostics
@@ -55,7 +57,7 @@ require("mcp-tools").setup({
     undo = true,        -- Undo tree
   },
 
-  -- Enable/disable integrations
+  -- Enable/disable integrations (all default to false)
   integrations = {
     opencode = true, -- Auto-register with OpenCode
   },
@@ -80,19 +82,42 @@ require("mcp-tools").setup({
 
 ### DAP Tools (requires nvim-dap)
 
+**Session Management:**
 | Tool | Description |
 |------|-------------|
 | `nvim_dap_status` | Get debug session status |
+| `nvim_dap_run` | Start a new debug session with configuration |
+| `nvim_dap_terminate` | Terminate the current debug session |
+| `nvim_dap_disconnect` | Disconnect from the debug adapter |
+
+**Execution Control:**
+| Tool | Description |
+|------|-------------|
+| `nvim_dap_continue` | Continue execution (with optional wait_until_paused) |
+| `nvim_dap_step_over` | Step over (with optional wait_until_paused) |
+| `nvim_dap_step_into` | Step into (with optional wait_until_paused) |
+| `nvim_dap_step_out` | Step out (with optional wait_until_paused) |
+| `nvim_dap_run_to` | Run to a specific file and line |
+| `nvim_dap_wait_until_paused` | Wait until debugger pauses |
+
+**Breakpoints:**
+| Tool | Description |
+|------|-------------|
+| `nvim_dap_set_breakpoint` | Set breakpoint at file:line with optional condition |
+| `nvim_dap_remove_breakpoint` | Remove breakpoint at file:line |
+| `nvim_dap_clear_breakpoints` | Clear all breakpoints |
+| `nvim_dap_breakpoints` | List all breakpoints |
+
+**Inspection:**
+| Tool | Description |
+|------|-------------|
 | `nvim_dap_stacktrace` | Get current call stack |
 | `nvim_dap_scopes` | Get scopes for a stack frame |
 | `nvim_dap_variables` | Get variables in a scope |
 | `nvim_dap_evaluate` | Evaluate an expression |
-| `nvim_dap_breakpoints` | List all breakpoints |
 | `nvim_dap_threads` | List all threads |
-| `nvim_dap_continue` | Continue execution |
-| `nvim_dap_step_over` | Step over |
-| `nvim_dap_step_into` | Step into |
-| `nvim_dap_step_out` | Step out |
+| `nvim_dap_current_location` | Get current location with code context |
+| `nvim_dap_program_output` | Get program stdout/stderr/console output |
 
 ### LSP Tools
 

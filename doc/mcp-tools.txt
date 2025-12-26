@@ -1,6 +1,6 @@
 *mcp-tools.txt*  Expose NeoVim functions as MCP tools for AI assistants
 
-Author:  Your Name
+Author: Jacob Segal (guill)
 License: MIT
 
 ==============================================================================
@@ -69,11 +69,11 @@ setup({opts})
         {opts}  (table|nil)  Configuration options
 
     Options: ~
-        tools.dap          (boolean)  Enable DAP tools (default: true)
-        tools.diagnostics  (boolean)  Enable diagnostics tools (default: true)
-        tools.lsp          (boolean)  Enable LSP tools (default: true)
-        tools.undo         (boolean)  Enable undo tools (default: true)
-        integrations.opencode  (boolean)  Auto-register with OpenCode (default: true)
+        tools.dap          (boolean)  Enable DAP tools (default: false)
+        tools.diagnostics  (boolean)  Enable diagnostics tools (default: false)
+        tools.lsp          (boolean)  Enable LSP tools (default: false)
+        tools.undo         (boolean)  Enable undo tools (default: false)
+        integrations.opencode  (boolean)  Auto-register with OpenCode (default: false)
         bridge.port        (number)   Port for MCP server, 0 = auto (default: 0)
         bridge.log_level   (string)   Log level: debug|info|warn|error (default: info)
         on_ready           (function) Called when bridge starts, receives port
@@ -82,13 +82,13 @@ setup({opts})
     Example: >lua
         require("mcp-tools").setup({
           tools = {
-            dap = true,
-            diagnostics = true,
-            lsp = true,
-            undo = true,
+            dap = true,         -- Enable DAP tools
+            diagnostics = true, -- Enable diagnostics tools
+            lsp = true,         -- Enable LSP tools
+            undo = true,        -- Enable undo tools
           },
           integrations = {
-            opencode = true,
+            opencode = true,    -- Enable OpenCode auto-integration
           },
           bridge = {
             port = 0,
@@ -107,17 +107,34 @@ All tools are prefixed with `nvim_` when exposed via MCP.
 
 DAP TOOLS (requires nvim-dap)                            *mcp-tools-dap-tools*
 
+Session Management: ~
     nvim_dap_status         Get debug session status
+    nvim_dap_run            Start a new debug session with configuration
+    nvim_dap_terminate      Terminate the current debug session
+    nvim_dap_disconnect     Disconnect from the debug adapter
+
+Execution Control: ~
+    nvim_dap_continue       Continue execution (supports wait_until_paused)
+    nvim_dap_step_over      Step over (supports wait_until_paused)
+    nvim_dap_step_into      Step into (supports wait_until_paused)
+    nvim_dap_step_out       Step out (supports wait_until_paused)
+    nvim_dap_run_to         Run to a specific file and line
+    nvim_dap_wait_until_paused  Wait until debugger pauses
+
+Breakpoints: ~
+    nvim_dap_set_breakpoint     Set breakpoint at file:line (with condition)
+    nvim_dap_remove_breakpoint  Remove breakpoint at file:line
+    nvim_dap_clear_breakpoints  Clear all breakpoints
+    nvim_dap_breakpoints        List all breakpoints
+
+Inspection: ~
     nvim_dap_stacktrace     Get current call stack
     nvim_dap_scopes         Get scopes for a stack frame
     nvim_dap_variables      Get variables in a scope
     nvim_dap_evaluate       Evaluate an expression
-    nvim_dap_breakpoints    List all breakpoints
     nvim_dap_threads        List all threads
-    nvim_dap_continue       Continue execution
-    nvim_dap_step_over      Step over
-    nvim_dap_step_into      Step into
-    nvim_dap_step_out       Step out
+    nvim_dap_current_location   Get current location with code context
+    nvim_dap_program_output     Get program stdout/stderr/console output
 
 LSP TOOLS                                                *mcp-tools-lsp-tools*
 
