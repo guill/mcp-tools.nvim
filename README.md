@@ -135,6 +135,9 @@ require("mcp-tools").setup({
 
 ## Registering Custom Tools
 
+Tools use a callback-based API. Call `cb(result)` to return success or `cb(nil, "error message")` to return an error.
+
+**Synchronous tool (most common):**
 ```lua
 local mcp = require("mcp-tools")
 
@@ -149,9 +152,41 @@ mcp.register({
       default = 0,
     },
   },
-  execute = function(args)
-    -- Your tool logic here
-    return { result = "success" }
+  execute = function(cb, args)
+    local buf = args.bufnr == 0 and vim.api.nvim_get_current_buf() or args.bufnr
+    cb({ buffer = buf, lines = vim.api.nvim_buf_line_count(buf) })
+  end,
+})
+```
+
+**Asynchronous tool (for long operations or user interaction):**
+```lua
+mcp.register({
+  name = "delayed_response",
+  description = "Returns after a delay",
+  args = {
+    delay_ms = { type = "number", required = false, default = 1000 },
+  },
+  execute = function(cb, args)
+    vim.defer_fn(function()
+      cb({ message = "Done after delay" })
+    end, args.delay_ms)
+  end,
+})
+```
+
+**Interactive tool (waits for user input):**
+```lua
+mcp.register({
+  name = "confirm_action",
+  description = "Ask user for confirmation",
+  args = {
+    prompt = { type = "string", required = true },
+  },
+  execute = function(cb, args)
+    vim.ui.select({"Yes", "No"}, { prompt = args.prompt }, function(choice)
+      cb({ confirmed = choice == "Yes" })
+    end)
   end,
 })
 ```

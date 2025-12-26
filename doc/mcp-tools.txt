@@ -164,7 +164,15 @@ register({tool})
         name        (string)    Unique tool name (required)
         description (string)    Description shown to AI (required)
         args        (table)     Argument schema (required, can be empty)
-        execute     (function)  Execution function (required)
+        execute     (function)  Callback function: execute(cb, args) (required)
+
+    The execute function receives two arguments:
+        cb    (function)  Callback to signal completion: cb(result, err?)
+        args  (table)     Arguments passed by the caller
+
+    To return a result, call cb(result). To return an error, call cb(nil, "error").
+    Tools can be synchronous (call cb immediately) or asynchronous (store cb
+    and call it later, e.g., after user interaction or a timer).
 
     Argument schema fields: ~
         type        (string)   "string"|"number"|"boolean"|"object"|"array"
@@ -172,7 +180,7 @@ register({tool})
         required    (boolean)  Whether argument is required (default: false)
         default     (any)      Default value if not provided
 
-    Example: >lua
+    Synchronous example: >lua
         require("mcp-tools").register({
           name = "my_tool",
           description = "Does something useful",
@@ -184,11 +192,26 @@ register({tool})
               default = 0,
             },
           },
-          execute = function(args)
+          execute = function(cb, args)
             local bufnr = args.bufnr == 0 
               and vim.api.nvim_get_current_buf() 
               or args.bufnr
-            return { lines = vim.api.nvim_buf_line_count(bufnr) }
+            cb({ lines = vim.api.nvim_buf_line_count(bufnr) })
+          end,
+        })
+<
+
+    Asynchronous example (with user input): >lua
+        require("mcp-tools").register({
+          name = "confirm_action",
+          description = "Ask user for confirmation",
+          args = {
+            prompt = { type = "string", required = true },
+          },
+          execute = function(cb, args)
+            vim.ui.select({"Yes", "No"}, { prompt = args.prompt }, function(choice)
+              cb({ confirmed = choice == "Yes" })
+            end)
           end,
         })
 <

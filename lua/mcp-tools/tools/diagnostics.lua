@@ -16,7 +16,7 @@ registry.register({
       required = false,
     },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local bufnr = args.bufnr == 0 and vim.api.nvim_get_current_buf() or args.bufnr
     local diagnostics = vim.diagnostic.get(bufnr)
 
@@ -35,7 +35,7 @@ registry.register({
       end
     end
 
-    return vim.tbl_map(function(d)
+    cb(vim.tbl_map(function(d)
       return {
         lnum = d.lnum + 1,
         col = d.col + 1,
@@ -43,6 +43,6 @@ registry.register({
         severity = vim.diagnostic.severity[d.severity],
         source = d.source,
       }
-    end, diagnostics)
+    end, diagnostics))
   end,
 })

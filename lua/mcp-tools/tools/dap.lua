@@ -5,11 +5,9 @@ if not ok then
   return
 end
 
--- Program output storage - stores output by session ID
 local program_output = {}
 local max_output_lines = 1000
 
--- Initialize output capture for a session
 local function init_output_capture(session_id)
   if not program_output[session_id] then
     program_output[session_id] = {
@@ -22,7 +20,6 @@ local function init_output_capture(session_id)
   end
 end
 
--- Add output to storage
 local function store_output(session_id, category, output, source)
   if not program_output[session_id] then
     init_output_capture(session_id)
@@ -44,7 +41,6 @@ local function store_output(session_id, category, output, source)
     end
   end
 
-  -- Limit storage size
   while #storage[category] > max_output_lines do
     table.remove(storage[category], 1)
   end
@@ -53,12 +49,10 @@ local function store_output(session_id, category, output, source)
   end
 end
 
--- Clean up output storage when session ends
 local function cleanup_output_storage(session_id)
   program_output[session_id] = nil
 end
 
--- Helper function to get code context around a specific line
 local function get_code_context(file_path, target_line, context_lines)
   context_lines = context_lines or 5
 
@@ -105,7 +99,6 @@ local function get_code_context(file_path, target_line, context_lines)
   return table.concat(context_output, "\n")
 end
 
--- Smart buffer management for DAP operations
 local function smart_buffer_management(target_file, target_line)
   local resolved_file = target_file
   if not vim.startswith(resolved_file, "/") then
@@ -149,7 +142,6 @@ local function smart_buffer_management(target_file, target_line)
     return false
   end
 
-  -- Check if target file is already open
   local target_bufnr = nil
   local target_winnr = nil
 
@@ -176,7 +168,6 @@ local function smart_buffer_management(target_file, target_line)
     return target_bufnr, target_winnr
   end
 
-  -- Find suitable window
   local suitable_winnr = nil
   local current_winnr = vim.api.nvim_get_current_win()
 
@@ -211,7 +202,6 @@ local function smart_buffer_management(target_file, target_line)
     return target_bufnr, suitable_winnr
   end
 
-  -- Create new split
   local width = vim.api.nvim_win_get_width(0)
   local split_cmd = width > 120 and "vsplit" or "split"
   vim.cmd(split_cmd .. " " .. vim.fn.fnameescape(resolved_file))
@@ -226,7 +216,6 @@ local function smart_buffer_management(target_file, target_line)
   return target_bufnr, target_winnr
 end
 
--- Wait until debugger pauses implementation
 local function wait_until_paused_impl(timeout_ms, check_interval_ms)
   timeout_ms = timeout_ms or 30000
   check_interval_ms = check_interval_ms or 100
@@ -276,12 +265,16 @@ local function wait_until_paused_impl(timeout_ms, check_interval_ms)
           pause_location = { file = "<unknown>", line = 0, function_name = "<unknown>" }
         end
         location_updated = true
-        pcall(dap.focus_frame)
+        vim.schedule(function()
+          pcall(dap.focus_frame)
+        end)
       end)
     else
       pause_location = { file = "<unknown>", line = 0, function_name = "<unknown>" }
       location_updated = true
-      pcall(dap.focus_frame)
+      vim.schedule(function()
+        pcall(dap.focus_frame)
+      end)
     end
     return true
   end
@@ -328,7 +321,6 @@ local function wait_until_paused_impl(timeout_ms, check_interval_ms)
     return false
   end, check_interval_ms)
 
-  -- Cleanup listeners
   dap.listeners.after["event_stopped"][listener_key] = nil
   dap.listeners.after["event_terminated"][listener_key] = nil
   dap.listeners.after["event_exited"][listener_key] = nil
@@ -365,7 +357,6 @@ local function wait_until_paused_impl(timeout_ms, check_interval_ms)
   return false, "Unknown wait condition result"
 end
 
--- Set up output event listeners
 dap.listeners.after["event_output"]["mcp_tools_output_capture"] = function(session, body)
   if session and session.id and body and body.output then
     local category = "console"
@@ -398,12 +389,13 @@ registry.register({
   name = "dap_status",
   description = "Get current debug session status including whether a session is active, stopped thread, and capabilities",
   args = {},
-  execute = function()
+  execute = function(cb)
     local session = dap.session()
     if not session then
-      return { active = false, message = "No active debug session" }
+      cb({ active = false, message = "No active debug session" })
+      return
     end
-    return {
+    cb({
       active = true,
       id = session.id,
       status = dap.status(),
@@ -411,7 +403,7 @@ registry.register({
       adapter_type = session.config and session.config.type or "unknown",
       name = session.config and session.config.name or "unnamed",
       capabilities = session.capabilities,
-    }
+    })
   end,
 })
 
@@ -419,65 +411,19 @@ registry.register({
   name = "dap_run",
   description = "Start a new debug session with specified configuration. Set breakpoints before calling this since the program may finish before you can set them otherwise.",
   args = {
-    type = {
-      type = "string",
-      description = "Debug adapter type (e.g., 'python', 'node2', 'cppdbg', 'codelldb')",
-      required = true,
-    },
-    request = {
-      type = "string",
-      description = "Request type: 'launch' or 'attach'",
-      required = true,
-    },
-    name = {
-      type = "string",
-      description = "Configuration name",
-      required = true,
-    },
-    program = {
-      type = "string",
-      description = "Program to debug (for launch requests). Use '${file}' for current file or '${workspaceFolder}' for cwd",
-      required = false,
-    },
-    args = {
-      type = "array",
-      description = "Program arguments as JSON array",
-      required = false,
-    },
-    cwd = {
-      type = "string",
-      description = "Working directory. Use '${workspaceFolder}' for cwd",
-      required = false,
-    },
-    env = {
-      type = "object",
-      description = "Environment variables as JSON object",
-      required = false,
-    },
-    host = {
-      type = "string",
-      description = "Host to connect to (for attach requests)",
-      required = false,
-    },
-    port = {
-      type = "number",
-      description = "Port to connect to (for attach requests)",
-      required = false,
-    },
-    wait_until_paused = {
-      type = "boolean",
-      description = "If true, wait until debugger pauses before returning",
-      required = false,
-      default = false,
-    },
-    wait_timeout_ms = {
-      type = "number",
-      description = "Timeout for waiting until paused in milliseconds",
-      required = false,
-      default = 30000,
-    },
+    type = { type = "string", description = "Debug adapter type (e.g., 'python', 'node2', 'cppdbg', 'codelldb')", required = true },
+    request = { type = "string", description = "Request type: 'launch' or 'attach'", required = true },
+    name = { type = "string", description = "Configuration name", required = true },
+    program = { type = "string", description = "Program to debug. Use '${file}' for current file or '${workspaceFolder}' for cwd", required = false },
+    args = { type = "array", description = "Program arguments as JSON array", required = false },
+    cwd = { type = "string", description = "Working directory. Use '${workspaceFolder}' for cwd", required = false },
+    env = { type = "object", description = "Environment variables as JSON object", required = false },
+    host = { type = "string", description = "Host to connect to (for attach requests)", required = false },
+    port = { type = "number", description = "Port to connect to (for attach requests)", required = false },
+    wait_until_paused = { type = "boolean", description = "If true, wait until debugger pauses before returning", required = false, default = false },
+    wait_timeout_ms = { type = "number", description = "Timeout for waiting until paused in milliseconds", required = false, default = 30000 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local config = {
       type = args.type,
       request = args.request,
@@ -506,7 +452,8 @@ registry.register({
 
     local run_ok, run_err = pcall(dap.run, config)
     if not run_ok then
-      return { error = "Failed to start debug session: " .. tostring(run_err) }
+      cb(nil, "Failed to start debug session: " .. tostring(run_err))
+      return
     end
 
     local result = { success = true, message = string.format("Started debug session '%s' with adapter '%s'", config.name, config.type) }
@@ -514,12 +461,13 @@ registry.register({
     if args.wait_until_paused then
       local wait_success, wait_result = wait_until_paused_impl(args.wait_timeout_ms)
       if not wait_success then
-        return { error = wait_result }
+        cb(nil, wait_result)
+        return
       end
       result.wait_result = wait_result
     end
 
-    return result
+    cb(result)
   end,
 })
 
@@ -527,18 +475,20 @@ registry.register({
   name = "dap_terminate",
   description = "Terminate the current debug session",
   args = {},
-  execute = function()
+  execute = function(cb)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
-    local ok, err = pcall(dap.terminate)
-    if not ok then
-      return { error = "Failed to terminate session: " .. tostring(err) }
+    local terminate_ok, err = pcall(dap.terminate)
+    if not terminate_ok then
+      cb(nil, "Failed to terminate session: " .. tostring(err))
+      return
     end
 
-    return { success = true, message = "Debug session terminated" }
+    cb({ success = true, message = "Debug session terminated" })
   end,
 })
 
@@ -546,26 +496,23 @@ registry.register({
   name = "dap_disconnect",
   description = "Disconnect from the debug adapter",
   args = {
-    terminate_debuggee = {
-      type = "boolean",
-      description = "Whether to terminate the debuggee process",
-      required = false,
-      default = true,
-    },
+    terminate_debuggee = { type = "boolean", description = "Whether to terminate the debuggee process", required = false, default = true },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     local opts = { terminateDebuggee = args.terminate_debuggee }
-    local ok, err = pcall(dap.disconnect, opts)
-    if not ok then
-      return { error = "Failed to disconnect: " .. tostring(err) }
+    local disconnect_ok, err = pcall(dap.disconnect, opts)
+    if not disconnect_ok then
+      cb(nil, "Failed to disconnect: " .. tostring(err))
+      return
     end
 
-    return { success = true, message = "Disconnected from debug adapter" }
+    cb({ success = true, message = "Disconnected from debug adapter" })
   end,
 })
 
@@ -577,23 +524,14 @@ registry.register({
   name = "dap_continue",
   description = "Continue execution of the debugged program",
   args = {
-    wait_until_paused = {
-      type = "boolean",
-      description = "If true, wait until debugger pauses (breakpoint hit, etc.) before returning",
-      required = false,
-      default = false,
-    },
-    wait_timeout_ms = {
-      type = "number",
-      description = "Timeout for waiting until paused in milliseconds",
-      required = false,
-      default = 30000,
-    },
+    wait_until_paused = { type = "boolean", description = "If true, wait until debugger pauses before returning", required = false, default = false },
+    wait_timeout_ms = { type = "number", description = "Timeout for waiting in milliseconds", required = false, default = 30000 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     dap.continue()
@@ -602,12 +540,13 @@ registry.register({
     if args.wait_until_paused then
       local wait_success, wait_result = wait_until_paused_impl(args.wait_timeout_ms)
       if not wait_success then
-        return { error = wait_result }
+        cb(nil, wait_result)
+        return
       end
       result.wait_result = wait_result
     end
 
-    return result
+    cb(result)
   end,
 })
 
@@ -615,23 +554,14 @@ registry.register({
   name = "dap_step_over",
   description = "Step over to the next line",
   args = {
-    wait_until_paused = {
-      type = "boolean",
-      description = "If true, wait until step completes before returning",
-      required = false,
-      default = false,
-    },
-    wait_timeout_ms = {
-      type = "number",
-      description = "Timeout for waiting in milliseconds",
-      required = false,
-      default = 30000,
-    },
+    wait_until_paused = { type = "boolean", description = "If true, wait until step completes before returning", required = false, default = false },
+    wait_timeout_ms = { type = "number", description = "Timeout for waiting in milliseconds", required = false, default = 30000 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     dap.step_over()
@@ -640,12 +570,13 @@ registry.register({
     if args.wait_until_paused then
       local wait_success, wait_result = wait_until_paused_impl(args.wait_timeout_ms)
       if not wait_success then
-        return { error = wait_result }
+        cb(nil, wait_result)
+        return
       end
       result.wait_result = wait_result
     end
 
-    return result
+    cb(result)
   end,
 })
 
@@ -653,23 +584,14 @@ registry.register({
   name = "dap_step_into",
   description = "Step into the function call",
   args = {
-    wait_until_paused = {
-      type = "boolean",
-      description = "If true, wait until step completes before returning",
-      required = false,
-      default = false,
-    },
-    wait_timeout_ms = {
-      type = "number",
-      description = "Timeout for waiting in milliseconds",
-      required = false,
-      default = 30000,
-    },
+    wait_until_paused = { type = "boolean", description = "If true, wait until step completes before returning", required = false, default = false },
+    wait_timeout_ms = { type = "number", description = "Timeout for waiting in milliseconds", required = false, default = 30000 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     dap.step_into()
@@ -678,12 +600,13 @@ registry.register({
     if args.wait_until_paused then
       local wait_success, wait_result = wait_until_paused_impl(args.wait_timeout_ms)
       if not wait_success then
-        return { error = wait_result }
+        cb(nil, wait_result)
+        return
       end
       result.wait_result = wait_result
     end
 
-    return result
+    cb(result)
   end,
 })
 
@@ -691,23 +614,14 @@ registry.register({
   name = "dap_step_out",
   description = "Step out of the current function",
   args = {
-    wait_until_paused = {
-      type = "boolean",
-      description = "If true, wait until step completes before returning",
-      required = false,
-      default = false,
-    },
-    wait_timeout_ms = {
-      type = "number",
-      description = "Timeout for waiting in milliseconds",
-      required = false,
-      default = 30000,
-    },
+    wait_until_paused = { type = "boolean", description = "If true, wait until step completes before returning", required = false, default = false },
+    wait_timeout_ms = { type = "number", description = "Timeout for waiting in milliseconds", required = false, default = 30000 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     dap.step_out()
@@ -716,12 +630,13 @@ registry.register({
     if args.wait_until_paused then
       local wait_success, wait_result = wait_until_paused_impl(args.wait_timeout_ms)
       if not wait_success then
-        return { error = wait_result }
+        cb(nil, wait_result)
+        return
       end
       result.wait_result = wait_result
     end
 
-    return result
+    cb(result)
   end,
 })
 
@@ -729,43 +644,28 @@ registry.register({
   name = "dap_run_to",
   description = "Run execution to a specific file and line number",
   args = {
-    filename = {
-      type = "string",
-      description = "Path to the file (absolute or relative to workspace)",
-      required = true,
-    },
-    line = {
-      type = "number",
-      description = "Line number to run to",
-      required = true,
-    },
-    wait_until_paused = {
-      type = "boolean",
-      description = "If true, wait until execution reaches the line before returning",
-      required = false,
-      default = false,
-    },
-    wait_timeout_ms = {
-      type = "number",
-      description = "Timeout for waiting in milliseconds",
-      required = false,
-      default = 30000,
-    },
+    filename = { type = "string", description = "Path to the file (absolute or relative to workspace)", required = true },
+    line = { type = "number", description = "Line number to run to", required = true },
+    wait_until_paused = { type = "boolean", description = "If true, wait until execution reaches the line", required = false, default = false },
+    wait_timeout_ms = { type = "number", description = "Timeout for waiting in milliseconds", required = false, default = 30000 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     local bufnr, err = smart_buffer_management(args.filename, args.line)
     if not bufnr then
-      return { error = tostring(err) }
+      cb(nil, tostring(err))
+      return
     end
 
     local run_ok, run_err = pcall(dap.run_to_cursor)
     if not run_ok then
-      return { error = "Failed to run to cursor: " .. tostring(run_err) }
+      cb(nil, "Failed to run to cursor: " .. tostring(run_err))
+      return
     end
 
     local result = { success = true, message = string.format("Running to %s:%d", args.filename, args.line) }
@@ -773,12 +673,13 @@ registry.register({
     if args.wait_until_paused then
       local wait_success, wait_result = wait_until_paused_impl(args.wait_timeout_ms)
       if not wait_success then
-        return { error = wait_result }
+        cb(nil, wait_result)
+        return
       end
       result.wait_result = wait_result
     end
 
-    return result
+    cb(result)
   end,
 })
 
@@ -786,31 +687,23 @@ registry.register({
   name = "dap_wait_until_paused",
   description = "Wait until the debugger is paused (breakpoint hit, step completed, etc.). Blocks until the debugger stops or times out.",
   args = {
-    timeout_ms = {
-      type = "number",
-      description = "Maximum time to wait in milliseconds",
-      required = false,
-      default = 30000,
-    },
-    check_interval_ms = {
-      type = "number",
-      description = "How often to check if paused in milliseconds",
-      required = false,
-      default = 100,
-    },
+    timeout_ms = { type = "number", description = "Maximum time to wait in milliseconds", required = false, default = 30000 },
+    check_interval_ms = { type = "number", description = "How often to check if paused in milliseconds", required = false, default = 100 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     local wait_success, wait_result = wait_until_paused_impl(args.timeout_ms, args.check_interval_ms)
     if not wait_success then
-      return { error = wait_result }
+      cb(nil, wait_result)
+      return
     end
 
-    return { success = true, result = wait_result }
+    cb({ success = true, result = wait_result })
   end,
 })
 
@@ -822,45 +715,27 @@ registry.register({
   name = "dap_set_breakpoint",
   description = "Set a breakpoint at a specific file and line number",
   args = {
-    filename = {
-      type = "string",
-      description = "Path to the file (absolute or relative to workspace)",
-      required = true,
-    },
-    line = {
-      type = "number",
-      description = "Line number for the breakpoint",
-      required = true,
-    },
-    condition = {
-      type = "string",
-      description = "Optional condition expression for the breakpoint",
-      required = false,
-    },
-    hit_condition = {
-      type = "string",
-      description = "Optional hit count condition (e.g., '5' to break on 5th hit)",
-      required = false,
-    },
-    log_message = {
-      type = "string",
-      description = "Optional log message (creates a logpoint instead of breakpoint)",
-      required = false,
-    },
+    filename = { type = "string", description = "Path to the file (absolute or relative to workspace)", required = true },
+    line = { type = "number", description = "Line number for the breakpoint", required = true },
+    condition = { type = "string", description = "Optional condition expression for the breakpoint", required = false },
+    hit_condition = { type = "string", description = "Optional hit count condition (e.g., '5' to break on 5th hit)", required = false },
+    log_message = { type = "string", description = "Optional log message (creates a logpoint instead of breakpoint)", required = false },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local bufnr, err = smart_buffer_management(args.filename, args.line)
     if not bufnr then
-      return { error = tostring(err) }
+      cb(nil, tostring(err))
+      return
     end
 
     local set_ok, set_err = pcall(dap.set_breakpoint, args.condition, args.hit_condition, args.log_message)
     if not set_ok then
-      return { error = "Failed to set breakpoint: " .. tostring(set_err) }
+      cb(nil, "Failed to set breakpoint: " .. tostring(set_err))
+      return
     end
 
     local msg = args.log_message and "logpoint" or "breakpoint"
-    return { success = true, message = string.format("Set %s at %s:%d", msg, args.filename, args.line) }
+    cb({ success = true, message = string.format("Set %s at %s:%d", msg, args.filename, args.line) })
   end,
 })
 
@@ -868,18 +743,10 @@ registry.register({
   name = "dap_remove_breakpoint",
   description = "Remove a breakpoint at a specific file and line",
   args = {
-    filename = {
-      type = "string",
-      description = "Path to the file (absolute or relative to workspace)",
-      required = true,
-    },
-    line = {
-      type = "number",
-      description = "Line number of the breakpoint to remove",
-      required = true,
-    },
+    filename = { type = "string", description = "Path to the file (absolute or relative to workspace)", required = true },
+    line = { type = "number", description = "Line number of the breakpoint to remove", required = true },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local resolved_file = args.filename
     if not vim.startswith(resolved_file, "/") then
       resolved_file = vim.fn.getcwd() .. "/" .. resolved_file
@@ -894,10 +761,10 @@ registry.register({
     end
 
     if not bufnr then
-      return { error = "File not loaded in any buffer: " .. args.filename }
+      cb(nil, "File not loaded in any buffer: " .. args.filename)
+      return
     end
 
-    -- Navigate to the line and toggle (remove) breakpoint
     local current_win = vim.api.nvim_get_current_win()
     local current_buf = vim.api.nvim_get_current_buf()
     local current_pos = vim.api.nvim_win_get_cursor(current_win)
@@ -905,17 +772,17 @@ registry.register({
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_win_set_cursor(current_win, { args.line, 0 })
 
-    local ok, err = pcall(dap.toggle_breakpoint)
+    local toggle_ok, err = pcall(dap.toggle_breakpoint)
 
-    -- Restore position
     vim.api.nvim_set_current_buf(current_buf)
     vim.api.nvim_win_set_cursor(current_win, current_pos)
 
-    if not ok then
-      return { error = "Failed to toggle breakpoint: " .. tostring(err) }
+    if not toggle_ok then
+      cb(nil, "Failed to toggle breakpoint: " .. tostring(err))
+      return
     end
 
-    return { success = true, message = string.format("Toggled breakpoint at %s:%d", args.filename, args.line) }
+    cb({ success = true, message = string.format("Toggled breakpoint at %s:%d", args.filename, args.line) })
   end,
 })
 
@@ -923,12 +790,13 @@ registry.register({
   name = "dap_clear_breakpoints",
   description = "Clear all breakpoints",
   args = {},
-  execute = function()
-    local ok, err = pcall(dap.clear_breakpoints)
-    if not ok then
-      return { error = "Failed to clear breakpoints: " .. tostring(err) }
+  execute = function(cb)
+    local clear_ok, err = pcall(dap.clear_breakpoints)
+    if not clear_ok then
+      cb(nil, "Failed to clear breakpoints: " .. tostring(err))
+      return
     end
-    return { success = true, message = "All breakpoints cleared" }
+    cb({ success = true, message = "All breakpoints cleared" })
   end,
 })
 
@@ -936,7 +804,7 @@ registry.register({
   name = "dap_breakpoints",
   description = "List all breakpoints with their locations and conditions",
   args = {},
-  execute = function()
+  execute = function(cb)
     local breakpoints = {}
 
     for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
@@ -963,7 +831,7 @@ registry.register({
       end
     end
 
-    return breakpoints
+    cb(breakpoints)
   end,
 })
 
@@ -973,45 +841,62 @@ registry.register({
 
 registry.register({
   name = "dap_stacktrace",
-  description = "Get the current call stack for the stopped thread. Returns stack frames with function names, file paths, and line numbers.",
+  description = "Get the current call stack for the stopped thread",
   args = {
-    thread_id = {
-      type = "number",
-      description = "Thread ID to get stack for (defaults to stopped thread)",
-      required = false,
-    },
-    levels = {
-      type = "number",
-      description = "Maximum number of stack frames to return",
-      required = false,
-      default = 20,
-    },
+    thread_id = { type = "number", description = "Thread ID to get stack for (defaults to stopped thread)", required = false },
+    levels = { type = "number", description = "Maximum number of stack frames to return", required = false, default = 20 },
+    timeout_ms = { type = "number", description = "Request timeout in milliseconds", required = false, default = 5000 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     local thread_id = args.thread_id or session.stopped_thread_id
     if not thread_id then
-      return { error = "No stopped thread" }
+      cb(nil, "No stopped thread")
+      return
     end
 
-    local response, err = session:request("stackTrace", {
+    local response = nil
+    local req_err = nil
+    local completed = false
+
+    session:request("stackTrace", {
       threadId = thread_id,
       levels = args.levels,
-    })
+    }, function(err, result)
+      req_err = err
+      response = result
+      completed = true
+    end)
 
-    if err then
-      return { error = tostring(err) }
+    local success = vim.wait(args.timeout_ms or 5000, function()
+      return completed
+    end, 100)
+
+    if not success then
+      cb(nil, "stackTrace request timed out")
+      return
     end
 
-    return {
+    if req_err then
+      cb(nil, tostring(req_err))
+      return
+    end
+
+    if not response then
+      cb(nil, "No response received from debug adapter")
+      return
+    end
+
+    cb({
       thread_id = thread_id,
       total_frames = response.totalFrames,
       stack_frames = response.stackFrames,
-    }
+    })
   end,
 })
 
@@ -1019,27 +904,48 @@ registry.register({
   name = "dap_scopes",
   description = "Get scopes for a stack frame. Returns scope information including variables references.",
   args = {
-    frame_id = {
-      type = "number",
-      description = "Stack frame ID to get scopes for",
-      required = true,
-    },
+    frame_id = { type = "number", description = "Stack frame ID to get scopes for", required = true },
+    timeout_ms = { type = "number", description = "Request timeout in milliseconds", required = false, default = 5000 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
-    local response, err = session:request("scopes", {
+    local response = nil
+    local req_err = nil
+    local completed = false
+
+    session:request("scopes", {
       frameId = args.frame_id,
-    })
+    }, function(err, result)
+      req_err = err
+      response = result
+      completed = true
+    end)
 
-    if err then
-      return { error = tostring(err) }
+    local success = vim.wait(args.timeout_ms or 5000, function()
+      return completed
+    end, 100)
+
+    if not success then
+      cb(nil, "scopes request timed out")
+      return
     end
 
-    return response.scopes
+    if req_err then
+      cb(nil, tostring(req_err))
+      return
+    end
+
+    if not response then
+      cb(nil, "No response received from debug adapter")
+      return
+    end
+
+    cb(response.scopes)
   end,
 })
 
@@ -1047,81 +953,70 @@ registry.register({
   name = "dap_variables",
   description = "Get variables in a scope. Use dap_scopes first to get variablesReference IDs.",
   args = {
-    variables_reference = {
-      type = "number",
-      description = "Variables reference ID from a scope or parent variable",
-      required = true,
-    },
-    filter = {
-      type = "string",
-      description = "Filter: 'indexed' for array elements, 'named' for properties",
-      required = false,
-    },
-    start = {
-      type = "number",
-      description = "Start index for indexed variables",
-      required = false,
-    },
-    count = {
-      type = "number",
-      description = "Number of variables to return",
-      required = false,
-    },
+    variables_reference = { type = "number", description = "Variables reference ID from a scope or parent variable", required = true },
+    filter = { type = "string", description = "Filter: 'indexed' for array elements, 'named' for properties", required = false },
+    start = { type = "number", description = "Start index for indexed variables", required = false },
+    count = { type = "number", description = "Number of variables to return", required = false },
+    timeout_ms = { type = "number", description = "Request timeout in milliseconds", required = false, default = 5000 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
-    local request_args = {
-      variablesReference = args.variables_reference,
-    }
-    if args.filter then
-      request_args.filter = args.filter
-    end
-    if args.start then
-      request_args.start = args.start
-    end
-    if args.count then
-      request_args.count = args.count
+    local request_args = { variablesReference = args.variables_reference }
+    if args.filter then request_args.filter = args.filter end
+    if args.start then request_args.start = args.start end
+    if args.count then request_args.count = args.count end
+
+    local response = nil
+    local req_err = nil
+    local completed = false
+
+    session:request("variables", request_args, function(err, result)
+      req_err = err
+      response = result
+      completed = true
+    end)
+
+    local success = vim.wait(args.timeout_ms or 5000, function()
+      return completed
+    end, 100)
+
+    if not success then
+      cb(nil, "variables request timed out")
+      return
     end
 
-    local response, err = session:request("variables", request_args)
-
-    if err then
-      return { error = tostring(err) }
+    if req_err then
+      cb(nil, tostring(req_err))
+      return
     end
 
-    return response.variables
+    if not response then
+      cb(nil, "No response received from debug adapter")
+      return
+    end
+
+    cb(response.variables)
   end,
 })
 
 registry.register({
   name = "dap_evaluate",
-  description = "Evaluate an expression in the debug context. Can evaluate variables, expressions, or execute REPL commands.",
+  description = "Evaluate an expression in the debug context",
   args = {
-    expression = {
-      type = "string",
-      description = "Expression to evaluate",
-      required = true,
-    },
-    frame_id = {
-      type = "number",
-      description = "Stack frame ID for evaluation context",
-      required = false,
-    },
-    context = {
-      type = "string",
-      description = "Context: 'watch', 'repl', or 'hover'",
-      required = false,
-      default = "repl",
-    },
+    expression = { type = "string", description = "Expression to evaluate", required = true },
+    frame_id = { type = "number", description = "Stack frame ID for evaluation context", required = false },
+    context = { type = "string", description = "Context: 'watch', 'repl', or 'hover'", required = false, default = "repl" },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     local eval_result = nil
@@ -1143,42 +1038,71 @@ registry.register({
     end, 100)
 
     if not success then
-      return { error = "Evaluation timed out" }
+      cb(nil, "Evaluation timed out")
+      return
     end
 
     if eval_error then
-      return { error = "Evaluation failed: " .. (eval_error.message or tostring(eval_error)) }
+      cb(nil, "Evaluation failed: " .. (eval_error.message or tostring(eval_error)))
+      return
     end
 
     if not eval_result then
-      return { error = "No evaluation result received" }
+      cb(nil, "No evaluation result received")
+      return
     end
 
-    return {
+    cb({
       result = eval_result.result or "<no result>",
       type = eval_result.type or "unknown",
       variables_reference = eval_result.variablesReference or 0,
-    }
+    })
   end,
 })
 
 registry.register({
   name = "dap_threads",
   description = "List all threads in the debug session",
-  args = {},
-  execute = function()
+  args = {
+    timeout_ms = { type = "number", description = "Request timeout in milliseconds", required = false, default = 5000 },
+  },
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
-    local response, err = session:request("threads", {})
+    local response = nil
+    local req_err = nil
+    local completed = false
 
-    if err then
-      return { error = tostring(err) }
+    session:request("threads", {}, function(err, result)
+      req_err = err
+      response = result
+      completed = true
+    end)
+
+    local success = vim.wait(args.timeout_ms or 5000, function()
+      return completed
+    end, 100)
+
+    if not success then
+      cb(nil, "threads request timed out")
+      return
     end
 
-    return response.threads
+    if req_err then
+      cb(nil, tostring(req_err))
+      return
+    end
+
+    if not response then
+      cb(nil, "No response received from debug adapter")
+      return
+    end
+
+    cb(response.threads)
   end,
 })
 
@@ -1186,22 +1110,19 @@ registry.register({
   name = "dap_current_location",
   description = "Get the current execution location with surrounding code context",
   args = {
-    context_lines = {
-      type = "number",
-      description = "Number of lines of code context to include above and below",
-      required = false,
-      default = 5,
-    },
+    context_lines = { type = "number", description = "Number of lines of code context to include above and below", required = false, default = 5 },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     local current_frame = session.current_frame
     if not current_frame then
-      return { error = "No current execution location available" }
+      cb(nil, "No current execution location available")
+      return
     end
 
     local location = {
@@ -1213,10 +1134,10 @@ registry.register({
 
     local code_context = get_code_context(location.file, location.line, args.context_lines)
 
-    return {
+    cb({
       location = location,
       code_context = code_context,
-    }
+    })
   end,
 })
 
@@ -1224,29 +1145,15 @@ registry.register({
   name = "dap_program_output",
   description = "Get the output from the running/debugged program (stdout, stderr, console)",
   args = {
-    category = {
-      type = "string",
-      description = "Output category: 'all', 'stdout', 'stderr', or 'console'",
-      required = false,
-      default = "all",
-    },
-    lines = {
-      type = "number",
-      description = "Number of recent lines to retrieve (max: 1000)",
-      required = false,
-      default = 50,
-    },
-    include_metadata = {
-      type = "boolean",
-      description = "Include timestamps and source information",
-      required = false,
-      default = false,
-    },
+    category = { type = "string", description = "Output category: 'all', 'stdout', 'stderr', or 'console'", required = false, default = "all" },
+    lines = { type = "number", description = "Number of recent lines to retrieve (max: 1000)", required = false, default = 50 },
+    include_metadata = { type = "boolean", description = "Include timestamps and source information", required = false, default = false },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local session = dap.session()
     if not session then
-      return { error = "No active debug session" }
+      cb(nil, "No active debug session")
+      return
     end
 
     local session_id = session.id
@@ -1255,7 +1162,8 @@ registry.register({
     local include_metadata = args.include_metadata or false
 
     if not program_output[session_id] then
-      return { message = "No output captured for current session", lines = {} }
+      cb({ message = "No output captured for current session", lines = {} })
+      return
     end
 
     local storage = program_output[session_id]
@@ -1276,7 +1184,8 @@ registry.register({
       end
     else
       if not storage[category] then
-        return { error = "Invalid category: " .. category }
+        cb(nil, "Invalid category: " .. category)
+        return
       end
 
       local cat_output = storage[category]
@@ -1287,10 +1196,10 @@ registry.register({
       end
     end
 
-    return {
+    cb({
       category = category,
       line_count = #output_lines,
       lines = output_lines,
-    }
+    })
   end,
 })

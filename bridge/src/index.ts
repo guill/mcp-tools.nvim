@@ -3,12 +3,15 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
+  CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import { attach, NeovimClient } from "neovim";
 import express, { Request, Response } from "express";
 
 const NVIM_SOCKET = process.env.NVIM_LISTEN_ADDRESS;
 const PORT = parseInt(process.env.MCP_PORT || "0");
+const POLL_INTERVAL_MS = 100;
+const MAX_WAIT_MS = 300000; // 5 minutes
 
 if (!NVIM_SOCKET) {
   console.error("NVIM_LISTEN_ADDRESS environment variable not set");
@@ -26,6 +29,69 @@ interface ToolDef {
   name: string;
   description: string;
   args: Record<string, ToolArg>;
+}
+
+interface ExecuteResponse {
+  done?: boolean;
+  pending?: boolean;
+  task_id?: string;
+  result?: unknown;
+  error?: string;
+}
+
+interface GetResultResponse {
+  done: boolean;
+  result?: unknown;
+  error?: string;
+}
+
+function formatResult(result: unknown): CallToolResult {
+  return {
+    content: [
+      {
+        type: "text",
+        text:
+          typeof result === "string" ? result : JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+}
+
+function formatError(error: string): CallToolResult {
+  return {
+    content: [{ type: "text", text: `Error: ${error}` }],
+    isError: true,
+  };
+}
+
+async function pollForResult(
+  nvim: NeovimClient,
+  taskId: string
+): Promise<CallToolResult> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < MAX_WAIT_MS) {
+    const response = (await nvim.call("luaeval", [
+      `require('mcp-tools.registry').get_result(_A)`,
+      taskId,
+    ])) as GetResultResponse;
+
+    if (response.done) {
+      if (response.error) {
+        return formatError(response.error);
+      }
+      return formatResult(response.result);
+    }
+
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+  }
+
+  await nvim.call("luaeval", [
+    `require('mcp-tools.registry').cancel_task(_A)`,
+    taskId,
+  ]);
+
+  return formatError(`Timeout after ${MAX_WAIT_MS}ms waiting for tool result`);
 }
 
 async function main() {
@@ -75,40 +141,31 @@ async function main() {
     };
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
     const { name, arguments: args } = request.params;
-
     const toolName = name.startsWith("nvim_") ? name.slice(5) : name;
 
     try {
-      const [result, error] = (await nvim.call("luaeval", [
+      const response = (await nvim.call("luaeval", [
         `require('mcp-tools.registry').execute(_A.name, _A.args)`,
         { name: toolName, args: args || {} },
-      ])) as [unknown, string | null];
+      ])) as ExecuteResponse;
 
-      if (error) {
-        return {
-          content: [{ type: "text", text: `Error: ${error}` }],
-          isError: true,
-        };
+      if (response.error && response.done) {
+        return formatError(response.error);
       }
 
-      return {
-        content: [
-          {
-            type: "text",
-            text:
-              typeof result === "string"
-                ? result
-                : JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+      if (response.done) {
+        return formatResult(response.result);
+      }
+
+      if (response.pending && response.task_id) {
+        return await pollForResult(nvim, response.task_id);
+      }
+
+      return formatError("Unexpected response from tool execution");
     } catch (err) {
-      return {
-        content: [{ type: "text", text: `Bridge error: ${err}` }],
-        isError: true,
-      };
+      return formatError(`Bridge error: ${err}`);
     }
   });
 

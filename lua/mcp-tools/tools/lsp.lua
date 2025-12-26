@@ -21,7 +21,7 @@ registry.register({
       required = false,
     },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local bufnr = args.bufnr == 0 and vim.api.nvim_get_current_buf() or args.bufnr
     local cursor = vim.api.nvim_win_get_cursor(0)
     local line = args.line and (args.line - 1) or cursor[1] - 1
@@ -34,7 +34,8 @@ registry.register({
 
     local results = vim.lsp.buf_request_sync(bufnr, "textDocument/hover", params, 2000)
     if not results then
-      return { error = "No hover information available" }
+      cb(nil, "No hover information available")
+      return
     end
 
     for _, result in pairs(results) do
@@ -42,17 +43,20 @@ registry.register({
         local contents = result.result.contents
         if type(contents) == "table" then
           if contents.value then
-            return { hover = contents.value, kind = contents.kind }
+            cb({ hover = contents.value, kind = contents.kind })
+            return
           elseif contents[1] then
-            return { hover = contents[1].value or contents[1], kind = contents[1].kind }
+            cb({ hover = contents[1].value or contents[1], kind = contents[1].kind })
+            return
           end
         else
-          return { hover = contents }
+          cb({ hover = contents })
+          return
         end
       end
     end
 
-    return { error = "No hover information available" }
+    cb(nil, "No hover information available")
   end,
 })
 
@@ -67,13 +71,14 @@ registry.register({
       default = 0,
     },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local bufnr = args.bufnr == 0 and vim.api.nvim_get_current_buf() or args.bufnr
     local params = { textDocument = vim.lsp.util.make_text_document_params(bufnr) }
 
     local results = vim.lsp.buf_request_sync(bufnr, "textDocument/documentSymbol", params, 5000)
     if not results then
-      return { error = "No symbols found" }
+      cb(nil, "No symbols found")
+      return
     end
 
     local symbols = {}
@@ -89,6 +94,6 @@ registry.register({
       end
     end
 
-    return symbols
+    cb(symbols)
   end,
 })

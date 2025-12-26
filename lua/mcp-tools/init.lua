@@ -29,7 +29,10 @@ function M.setup(opts)
   end
 
   if config.get("integrations.opencode") then
-    pcall(require, "mcp-tools.integrations.opencode")
+    local ok, opencode_integration = pcall(require, "mcp-tools.integrations.opencode")
+    if ok then
+      opencode_integration.setup()
+    end
   end
 end
 

@@ -11,16 +11,16 @@ registry.register({
       default = 0,
     },
   },
-  execute = function(args)
+  execute = function(cb, args)
     local bufnr = args.bufnr == 0 and vim.api.nvim_get_current_buf() or args.bufnr
     vim.api.nvim_set_current_buf(bufnr)
     local tree = vim.fn.undotree()
-    return {
+    cb({
       seq_cur = tree.seq_cur,
       seq_last = tree.seq_last,
       save_cur = tree.save_cur,
       save_last = tree.save_last,
       entries = tree.entries,
-    }
+    })
   end,
 })
