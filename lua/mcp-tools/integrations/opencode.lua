@@ -37,6 +37,32 @@ local function register_with_opencode(opencode_url, mcp_port)
   end)
 end
 
+local function start_bridge_when_ready(server)
+  if not server or not server.get_spawn_promise then
+    return
+  end
+
+  server:get_spawn_promise():and_then(function(ready_server)
+    if not ready_server or not ready_server.url then
+      return
+    end
+
+    bridge.start({
+      nvim_socket = vim.v.servername,
+      on_ready = function(port)
+        register_with_opencode(ready_server.url, port)
+      end,
+      on_stop = function()
+        local config = require("mcp-tools.config")
+        local on_stop = config.get("on_stop")
+        if on_stop then
+          on_stop()
+        end
+      end,
+    })
+  end)
+end
+
 function M.setup()
   if M._subscribed then
     return
@@ -50,32 +76,15 @@ function M.setup()
   M._subscribed = true
 
   opencode_state.subscribe("opencode_server", function(_, server, prev)
-    if server and server.url then
-      bridge.start({
-        nvim_socket = vim.v.servername,
-        on_ready = function(port)
-          register_with_opencode(server.url, port)
-        end,
-        on_stop = function()
-          local config = require("mcp-tools.config")
-          local on_stop = config.get("on_stop")
-          if on_stop then
-            on_stop()
-          end
-        end,
-      })
+    if server then
+      start_bridge_when_ready(server)
     elseif prev and not server then
       bridge.stop()
     end
   end)
 
-  if opencode_state.opencode_server and opencode_state.opencode_server.url then
-    bridge.start({
-      nvim_socket = vim.v.servername,
-      on_ready = function(port)
-        register_with_opencode(opencode_state.opencode_server.url, port)
-      end,
-    })
+  if opencode_state.opencode_server then
+    start_bridge_when_ready(opencode_state.opencode_server)
   end
 end
 
