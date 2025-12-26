@@ -41,13 +41,16 @@ local function format_mcp_status(response)
   return "unknown", vim.inspect(response)
 end
 
-local function register_with_opencode(opencode_url, mcp_port)
+local function register_with_opencode(opencode_url, mcp_port, auth_token)
   local mcp_url = "http://127.0.0.1:" .. mcp_port
   local body = vim.json.encode({
     name = "nvim-tools",
     config = {
       type = "remote",
       url = mcp_url,
+      headers = {
+        Authorization = "Bearer " .. auth_token,
+      },
     },
   })
 
@@ -124,7 +127,10 @@ local function start_bridge_when_ready(server)
     bridge.start({
       nvim_socket = vim.v.servername,
       on_ready = function(port)
-        register_with_opencode(ready_server.url, port)
+        local auth_token = bridge.get_auth_token()
+        if auth_token then
+          register_with_opencode(ready_server.url, port, auth_token)
+        end
       end,
       on_stop = function()
         local config = require("mcp-tools.config")

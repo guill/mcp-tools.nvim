@@ -11,11 +11,12 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { attach, NeovimClient } from "neovim";
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 
 const NVIM_SOCKET = process.env.NVIM_LISTEN_ADDRESS;
 const PORT = parseInt(process.env.MCP_PORT || "0");
 const LOG_FILE = process.env.MCP_LOG_FILE;
+const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
 const POLL_INTERVAL_MS = 100;
 const MAX_WAIT_MS = 300000;
 
@@ -42,6 +43,20 @@ function log(msg: string): void {
 if (!NVIM_SOCKET) {
   log("ERROR: NVIM_LISTEN_ADDRESS environment variable not set");
   process.exit(1);
+}
+
+if (!AUTH_TOKEN) {
+  log("ERROR: MCP_AUTH_TOKEN environment variable not set");
+  process.exit(1);
+}
+
+function validateAuthToken(req: Request): boolean {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return false;
+  }
+  const [scheme, token] = authHeader.split(" ");
+  return scheme === "Bearer" && token === AUTH_TOKEN;
 }
 
 interface ToolArg {
@@ -224,6 +239,38 @@ async function main() {
 
   const app = express();
   app.use(express.json());
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Access-Control-Allow-Origin", "null");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, mcp-session-id");
+
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
+      return;
+    }
+
+    next();
+  });
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path === "/health") {
+      next();
+      return;
+    }
+
+    if (!validateAuthToken(req)) {
+      log(`Unauthorized request to ${req.path} from ${req.ip}`);
+      res.status(401).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Unauthorized: Invalid or missing auth token" },
+        id: null,
+      });
+      return;
+    }
+
+    next();
+  });
 
   const transports: Record<
     string,

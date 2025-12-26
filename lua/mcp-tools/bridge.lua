@@ -7,6 +7,30 @@ local function debug_notify(msg, level)
   end
 end
 
+---Generate a cryptographically random token for authentication
+---@return string
+local function generate_auth_token()
+  local bytes = {}
+  -- Read 32 bytes from /dev/urandom for a 256-bit token
+  local file = io.open("/dev/urandom", "rb")
+  if file then
+    local data = file:read(32)
+    file:close()
+    if data then
+      for i = 1, #data do
+        table.insert(bytes, string.format("%02x", string.byte(data, i)))
+      end
+      return table.concat(bytes)
+    end
+  end
+  -- Fallback: use Lua's math.random (less secure but works everywhere)
+  math.randomseed(os.time() + vim.loop.hrtime())
+  for _ = 1, 32 do
+    table.insert(bytes, string.format("%02x", math.random(0, 255)))
+  end
+  return table.concat(bytes)
+end
+
 ---@type vim.SystemObj?
 M._process = nil
 
@@ -21,6 +45,9 @@ M._on_stop = nil
 
 ---@type string?
 M._bridge_path = nil
+
+---@type string?
+M._auth_token = nil
 
 ---@type string[]
 M._stdout_buffer = {}
@@ -83,10 +110,13 @@ function M.start(opts)
   local config = require("mcp-tools.config")
   local log_file = config.get("bridge.log_file")
 
+  M._auth_token = generate_auth_token()
+
   local env = vim.tbl_extend("force", vim.fn.environ(), {
     NVIM_LISTEN_ADDRESS = opts.nvim_socket,
     MCP_PORT = tostring(opts.port or 0),
     MCP_LOG_FILE = log_file or "",
+    MCP_AUTH_TOKEN = M._auth_token,
   })
 
   M._process = vim.system(cmd, {
@@ -134,6 +164,7 @@ function M.stop()
     M._process:kill("sigterm")
     M._process = nil
     M._port = nil
+    M._auth_token = nil
   end
 end
 
@@ -145,6 +176,11 @@ end
 ---@return number?
 function M.get_port()
   return M._port
+end
+
+---@return string?
+function M.get_auth_token()
+  return M._auth_token
 end
 
 return M
