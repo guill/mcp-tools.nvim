@@ -15,7 +15,7 @@ A NeoVim plugin that exposes Lua functions as MCP (Model Context Protocol) tools
 - NeoVim 0.9+
 - One of: [bun](https://bun.sh/) or Node.js 18+ with npx
 - Optional: [nvim-dap](https://github.com/mfussenegger/nvim-dap) for debug tools
-- Optional: [opencode.nvim](https://github.com/opencode-ai/opencode.nvim) for auto-integration
+- Optional: [opencode.nvim](https://github.com/sudo-tee/opencode.nvim) for auto-integration
 
 ## Installation
 
@@ -23,7 +23,7 @@ A NeoVim plugin that exposes Lua functions as MCP (Model Context Protocol) tools
 
 ```lua
 {
-  "your-username/mcp-tools.nvim",
+  "guill/mcp-tools.nvim",
   build = "cd bridge && npm install",
   config = function()
     require("mcp-tools").setup()
@@ -35,7 +35,7 @@ A NeoVim plugin that exposes Lua functions as MCP (Model Context Protocol) tools
 
 ```lua
 use {
-  "your-username/mcp-tools.nvim",
+  "guill/mcp-tools.nvim",
   run = "cd bridge && npm install",
   config = function()
     require("mcp-tools").setup()

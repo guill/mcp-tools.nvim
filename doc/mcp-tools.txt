@@ -1,0 +1,245 @@
+*mcp-tools.txt*  Expose NeoVim functions as MCP tools for AI assistants
+
+Author:  Your Name
+License: MIT
+
+==============================================================================
+CONTENTS                                                  *mcp-tools-contents*
+
+    1. Introduction .......................... |mcp-tools-introduction|
+    2. Requirements .......................... |mcp-tools-requirements|
+    3. Installation .......................... |mcp-tools-installation|
+    4. Configuration ......................... |mcp-tools-configuration|
+    5. Built-in Tools ........................ |mcp-tools-builtin|
+    6. Custom Tools .......................... |mcp-tools-custom|
+    7. API ................................... |mcp-tools-api|
+    8. Health Check .......................... |mcp-tools-health|
+
+==============================================================================
+1. INTRODUCTION                                       *mcp-tools-introduction*
+
+mcp-tools.nvim exposes Lua functions as MCP (Model Context Protocol) tools
+for AI coding assistants like OpenCode, Claude Code, and Cursor.
+
+Primary use case: Allow AI assistants to inspect NeoVim state including
+debug sessions (DAP), LSP information, diagnostics, and undo history.
+
+==============================================================================
+2. REQUIREMENTS                                       *mcp-tools-requirements*
+
+- NeoVim 0.9+
+- bun (https://bun.sh/) OR Node.js 18+ with npx
+- Optional: nvim-dap for debug tools
+- Optional: opencode.nvim for auto-integration
+
+==============================================================================
+3. INSTALLATION                                       *mcp-tools-installation*
+
+Using lazy.nvim: >lua
+    {
+      "your-username/mcp-tools.nvim",
+      build = "cd bridge && npm install",
+      config = function()
+        require("mcp-tools").setup()
+      end,
+    }
+<
+
+Using packer.nvim: >lua
+    use {
+      "your-username/mcp-tools.nvim",
+      run = "cd bridge && npm install",
+      config = function()
+        require("mcp-tools").setup()
+      end,
+    }
+<
+
+After installation, run `:checkhealth mcp-tools` to verify.
+
+==============================================================================
+4. CONFIGURATION                                     *mcp-tools-configuration*
+
+                                                            *mcp-tools.setup()*
+setup({opts})
+
+    Configure the plugin. Call this in your init.lua.
+
+    Parameters: ~
+        {opts}  (table|nil)  Configuration options
+
+    Options: ~
+        tools.dap          (boolean)  Enable DAP tools (default: true)
+        tools.diagnostics  (boolean)  Enable diagnostics tools (default: true)
+        tools.lsp          (boolean)  Enable LSP tools (default: true)
+        tools.undo         (boolean)  Enable undo tools (default: true)
+        integrations.opencode  (boolean)  Auto-register with OpenCode (default: true)
+        bridge.port        (number)   Port for MCP server, 0 = auto (default: 0)
+        bridge.log_level   (string)   Log level: debug|info|warn|error (default: info)
+        on_ready           (function) Called when bridge starts, receives port
+        on_stop            (function) Called when bridge stops
+
+    Example: >lua
+        require("mcp-tools").setup({
+          tools = {
+            dap = true,
+            diagnostics = true,
+            lsp = true,
+            undo = true,
+          },
+          integrations = {
+            opencode = true,
+          },
+          bridge = {
+            port = 0,
+            log_level = "info",
+          },
+          on_ready = function(port)
+            print("MCP ready on port " .. port)
+          end,
+        })
+<
+
+==============================================================================
+5. BUILT-IN TOOLS                                         *mcp-tools-builtin*
+
+All tools are prefixed with `nvim_` when exposed via MCP.
+
+DAP TOOLS (requires nvim-dap)                            *mcp-tools-dap-tools*
+
+    nvim_dap_status         Get debug session status
+    nvim_dap_stacktrace     Get current call stack
+    nvim_dap_scopes         Get scopes for a stack frame
+    nvim_dap_variables      Get variables in a scope
+    nvim_dap_evaluate       Evaluate an expression
+    nvim_dap_breakpoints    List all breakpoints
+    nvim_dap_threads        List all threads
+    nvim_dap_continue       Continue execution
+    nvim_dap_step_over      Step over
+    nvim_dap_step_into      Step into
+    nvim_dap_step_out       Step out
+
+LSP TOOLS                                                *mcp-tools-lsp-tools*
+
+    nvim_lsp_hover          Get hover information at cursor
+    nvim_lsp_symbols        Get document symbols
+
+DIAGNOSTICS TOOLS                                *mcp-tools-diagnostics-tools*
+
+    nvim_diagnostics_list   Get diagnostics for a buffer
+
+UNDO TOOLS                                              *mcp-tools-undo-tools*
+
+    nvim_undo_tree          Get undo tree structure
+
+==============================================================================
+6. CUSTOM TOOLS                                           *mcp-tools-custom*
+
+                                                         *mcp-tools.register()*
+register({tool})
+
+    Register a custom tool.
+
+    Parameters: ~
+        {tool}  (table)  Tool definition
+
+    Tool definition fields: ~
+        name        (string)    Unique tool name (required)
+        description (string)    Description shown to AI (required)
+        args        (table)     Argument schema (required, can be empty)
+        execute     (function)  Execution function (required)
+
+    Argument schema fields: ~
+        type        (string)   "string"|"number"|"boolean"|"object"|"array"
+        description (string)   Argument description
+        required    (boolean)  Whether argument is required (default: false)
+        default     (any)      Default value if not provided
+
+    Example: >lua
+        require("mcp-tools").register({
+          name = "my_tool",
+          description = "Does something useful",
+          args = {
+            bufnr = {
+              type = "number",
+              description = "Buffer number (0 for current)",
+              required = false,
+              default = 0,
+            },
+          },
+          execute = function(args)
+            local bufnr = args.bufnr == 0 
+              and vim.api.nvim_get_current_buf() 
+              or args.bufnr
+            return { lines = vim.api.nvim_buf_line_count(bufnr) }
+          end,
+        })
+<
+
+                                                       *mcp-tools.unregister()*
+unregister({name})
+
+    Remove a registered tool.
+
+    Parameters: ~
+        {name}  (string)  Tool name to remove
+
+==============================================================================
+7. API                                                         *mcp-tools-api*
+
+                                                            *mcp-tools.start()*
+start({opts})
+
+    Start the MCP bridge manually.
+
+    Parameters: ~
+        {opts}  (table|nil)  Start options
+
+    Options: ~
+        nvim_socket  (string)  NeoVim socket path (default: vim.v.servername)
+        port         (number)  Port to listen on (default: from config)
+
+                                                             *mcp-tools.stop()*
+stop()
+
+    Stop the MCP bridge.
+
+                                                       *mcp-tools.is_running()*
+is_running()
+
+    Check if the bridge is running.
+
+    Returns: ~
+        (boolean)  true if bridge is running
+
+                                                         *mcp-tools.get_port()*
+get_port()
+
+    Get the port the bridge is listening on.
+
+    Returns: ~
+        (number|nil)  Port number, or nil if not running
+
+                                                       *mcp-tools.list_tools()*
+list_tools()
+
+    Get all registered tools.
+
+    Returns: ~
+        (table)  Map of tool name to tool definition (without execute function)
+
+==============================================================================
+8. HEALTH CHECK                                           *mcp-tools-health*
+
+Run `:checkhealth mcp-tools` to verify your installation.
+
+The health check verifies:
+- JavaScript runtime (bun or npx) is available
+- Bridge script exists
+- npm dependencies are installed
+- Bridge running status
+- Tool registration status
+- Optional dependencies (nvim-dap, opencode.nvim)
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
