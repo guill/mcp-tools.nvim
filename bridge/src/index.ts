@@ -1,20 +1,46 @@
+import { randomUUID } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
   CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { attach, NeovimClient } from "neovim";
 import express, { Request, Response } from "express";
 
 const NVIM_SOCKET = process.env.NVIM_LISTEN_ADDRESS;
 const PORT = parseInt(process.env.MCP_PORT || "0");
+const LOG_FILE = process.env.MCP_LOG_FILE;
 const POLL_INTERVAL_MS = 100;
-const MAX_WAIT_MS = 300000; // 5 minutes
+const MAX_WAIT_MS = 300000;
+
+let logStream: fs.WriteStream | null = null;
+if (LOG_FILE) {
+  const logDir = path.dirname(LOG_FILE);
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+  logStream = fs.createWriteStream(LOG_FILE, { flags: "a" });
+}
+
+// The neovim package monkey-patches console.* to redirect to a silent logger.
+// We must use process.stderr.write() for any output we want to see.
+function log(msg: string): void {
+  const timestamp = new Date().toISOString();
+  const line = `[${timestamp}] [bridge] ${msg}`;
+  process.stderr.write(line + "\n");
+  if (logStream) {
+    logStream.write(line + "\n");
+  }
+}
 
 if (!NVIM_SOCKET) {
-  console.error("NVIM_LISTEN_ADDRESS environment variable not set");
+  log("ERROR: NVIM_LISTEN_ADDRESS environment variable not set");
   process.exit(1);
 }
 
@@ -94,11 +120,7 @@ async function pollForResult(
   return formatError(`Timeout after ${MAX_WAIT_MS}ms waiting for tool result`);
 }
 
-async function main() {
-  const nvim: NeovimClient = attach({ socket: NVIM_SOCKET });
-
-  console.error(`Connected to NeoVim at ${NVIM_SOCKET}`);
-
+function createMcpServer(nvim: NeovimClient): Server {
   const server = new Server(
     { name: "mcp-tools-nvim", version: "1.0.0" },
     { capabilities: { tools: {} } }
@@ -110,96 +132,228 @@ async function main() {
         "require('mcp-tools.registry').list()",
       ])) as Record<string, ToolDef>;
     } catch (err) {
-      console.error("Failed to discover tools:", err);
+      log(`Failed to discover tools: ${err}`);
       return {};
     }
   }
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    log("Handling tools/list request");
     const tools = await discoverTools();
-    return {
-      tools: Object.entries(tools).map(([name, def]) => ({
-        name: `nvim_${name}`,
-        description: def.description,
-        inputSchema: {
-          type: "object" as const,
-          properties: Object.fromEntries(
-            Object.entries(def.args).map(([argName, argDef]) => [
-              argName,
-              {
-                type: argDef.type,
-                description: argDef.description,
-                default: argDef.default,
-              },
-            ])
-          ),
-          required: Object.entries(def.args)
-            .filter(([_, d]) => d.required)
-            .map(([n]) => n),
-        },
-      })),
-    };
+    const toolList = Object.entries(tools).map(([name, def]) => ({
+      name: `nvim_${name}`,
+      description: def.description,
+      inputSchema: {
+        type: "object" as const,
+        properties: Object.fromEntries(
+          Object.entries(def.args).map(([argName, argDef]) => [
+            argName,
+            {
+              type: argDef.type,
+              description: argDef.description,
+              default: argDef.default,
+            },
+          ])
+        ),
+        required: Object.entries(def.args)
+          .filter(([_, d]) => d.required)
+          .map(([n]) => n),
+      },
+    }));
+    log(`Returning ${toolList.length} tools`);
+    return { tools: toolList };
   });
 
-  server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
-    const { name, arguments: args } = request.params;
-    const toolName = name.startsWith("nvim_") ? name.slice(5) : name;
+  server.setRequestHandler(
+    CallToolRequestSchema,
+    async (request): Promise<CallToolResult> => {
+      const { name, arguments: args } = request.params;
+      const toolName = name.startsWith("nvim_") ? name.slice(5) : name;
+      log(`Handling tools/call for: ${name} (${toolName})`);
 
-    try {
-      const response = (await nvim.call("luaeval", [
-        `require('mcp-tools.registry').execute(_A.name, _A.args)`,
-        { name: toolName, args: args || {} },
-      ])) as ExecuteResponse;
+      try {
+        const response = (await nvim.call("luaeval", [
+          `require('mcp-tools.registry').execute(_A.name, _A.args)`,
+          { name: toolName, args: args || {} },
+        ])) as ExecuteResponse;
 
-      if (response.error && response.done) {
-        return formatError(response.error);
+        if (response.error && response.done) {
+          log(`Tool error: ${response.error}`);
+          return formatError(response.error);
+        }
+
+        if (response.done) {
+          log(`Tool completed synchronously`);
+          return formatResult(response.result);
+        }
+
+        if (response.pending && response.task_id) {
+          log(`Tool running async, polling task: ${response.task_id}`);
+          return await pollForResult(nvim, response.task_id);
+        }
+
+        return formatError("Unexpected response from tool execution");
+      } catch (err) {
+        log(`Bridge error: ${err}`);
+        return formatError(`Bridge error: ${err}`);
       }
-
-      if (response.done) {
-        return formatResult(response.result);
-      }
-
-      if (response.pending && response.task_id) {
-        return await pollForResult(nvim, response.task_id);
-      }
-
-      return formatError("Unexpected response from tool execution");
-    } catch (err) {
-      return formatError(`Bridge error: ${err}`);
     }
-  });
+  );
+
+  return server;
+}
+
+async function main() {
+  log(`Starting MCP bridge, connecting to NeoVim at ${NVIM_SOCKET}`);
+  if (LOG_FILE) {
+    log(`Logging to file: ${LOG_FILE}`);
+  }
+
+  const nvim: NeovimClient = attach({ socket: NVIM_SOCKET });
+
+  log(`Attached to NeoVim, testing connection...`);
+
+  try {
+    const version = await nvim.request("nvim_get_api_info", []);
+    log(`NeoVim API version: ${version[0]}`);
+  } catch (err) {
+    log(`Failed to get API info: ${err}`);
+  }
+
+  log(`Connected to NeoVim at ${NVIM_SOCKET}`);
 
   const app = express();
+  app.use(express.json());
 
-  const transports: Map<string, SSEServerTransport> = new Map();
+  const transports: Record<
+    string,
+    StreamableHTTPServerTransport | SSEServerTransport
+  > = {};
 
-  app.get("/sse", async (req: Request, res: Response) => {
-    const sessionId = req.query.sessionId as string | undefined;
-    const transport = new SSEServerTransport("/messages", res);
+  app.all("/", async (req: Request, res: Response) => {
+    log(`Received ${req.method} request to / (Streamable HTTP)`);
 
-    if (sessionId) {
-      transports.set(sessionId, transport);
-    }
+    try {
+      const sessionId = req.headers["mcp-session-id"] as string | undefined;
+      let transport: StreamableHTTPServerTransport;
 
-    res.on("close", () => {
-      if (sessionId) {
-        transports.delete(sessionId);
+      if (sessionId && transports[sessionId]) {
+        const existingTransport = transports[sessionId];
+        if (existingTransport instanceof StreamableHTTPServerTransport) {
+          transport = existingTransport;
+          log(`Reusing existing Streamable HTTP session: ${sessionId}`);
+        } else {
+          res.status(400).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message:
+                "Bad Request: Session exists but uses a different transport protocol",
+            },
+            id: null,
+          });
+          return;
+        }
+      } else if (
+        !sessionId &&
+        req.method === "POST" &&
+        isInitializeRequest(req.body)
+      ) {
+        log(`Creating new Streamable HTTP transport (stateless mode)`);
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => {
+            log(`Streamable HTTP session initialized: ${sid}`);
+            transports[sid] = transport;
+          },
+        });
+
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid && transports[sid]) {
+            log(`Transport closed for session ${sid}`);
+            delete transports[sid];
+          }
+        };
+
+        const server = createMcpServer(nvim);
+        await server.connect(transport);
+      } else if (req.method === "GET") {
+        log(`GET request without session, returning 405`);
+        res.status(405).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: "Method not allowed: Use POST to initialize session",
+          },
+          id: null,
+        });
+        return;
+      } else {
+        log(`Invalid request: no session ID and not initialization`);
+        res.status(400).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: "Bad Request: No valid session ID provided",
+          },
+          id: null,
+        });
+        return;
       }
-    });
 
-    await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (error) {
+      log(`Error handling Streamable HTTP request: ${error}`);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32603,
+            message: "Internal server error",
+          },
+          id: null,
+        });
+      }
+    }
   });
 
-  app.post("/messages", express.json(), async (req: Request, res: Response) => {
-    const sessionId = req.query.sessionId as string | undefined;
-    const transport = sessionId ? transports.get(sessionId) : undefined;
+  app.get("/sse", async (_req: Request, res: Response) => {
+    log(`Received GET request to /sse (deprecated SSE transport)`);
+    const transport = new SSEServerTransport("/messages", res);
+    transports[transport.sessionId] = transport;
 
-    if (!transport) {
-      res.status(400).json({ error: "No transport found for session" });
-      return;
+    res.on("close", () => {
+      log(`SSE connection closed for session ${transport.sessionId}`);
+      delete transports[transport.sessionId];
+    });
+
+    const server = createMcpServer(nvim);
+    await server.connect(transport);
+    log(`SSE transport connected with session: ${transport.sessionId}`);
+  });
+
+  app.post("/messages", async (req: Request, res: Response) => {
+    const sessionId = req.query.sessionId as string;
+    log(`Received POST to /messages for session: ${sessionId}`);
+
+    const existingTransport = transports[sessionId];
+    if (existingTransport instanceof SSEServerTransport) {
+      await existingTransport.handlePostMessage(req, res, req.body);
+    } else if (existingTransport instanceof StreamableHTTPServerTransport) {
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message:
+            "Bad Request: Session exists but uses a different transport protocol",
+        },
+        id: null,
+      });
+    } else {
+      log(`No transport found for session: ${sessionId}`);
+      res.status(400).send("No transport found for sessionId");
     }
-
-    await transport.handlePostMessage(req, res);
   });
 
   app.get("/health", (_req: Request, res: Response) => {
@@ -209,25 +363,40 @@ async function main() {
   const httpServer = app.listen(PORT, "127.0.0.1", () => {
     const addr = httpServer.address();
     const actualPort = typeof addr === "object" ? addr?.port : PORT;
-    console.log(`MCP server listening on port ${actualPort}`);
+    // Parsed by Lua bridge.lua to extract the port number
+    process.stdout.write(`MCP server listening on port ${actualPort}\n`);
+    log(`Server started on port ${actualPort}`);
   });
 
-  process.on("SIGTERM", () => {
-    console.error("Received SIGTERM, shutting down...");
-    httpServer.close();
-    nvim.quit();
-    process.exit(0);
-  });
+  const shutdown = async (signal: string) => {
+    log(`Received ${signal}, shutting down...`);
 
-  process.on("SIGINT", () => {
-    console.error("Received SIGINT, shutting down...");
+    for (const sessionId in transports) {
+      try {
+        log(`Closing transport for session ${sessionId}`);
+        await transports[sessionId]!.close();
+        delete transports[sessionId];
+      } catch (error) {
+        log(`Error closing transport for session ${sessionId}: ${error}`);
+      }
+    }
+
     httpServer.close();
     nvim.quit();
+
+    if (logStream) {
+      logStream.end();
+    }
+
+    log("Server shutdown complete");
     process.exit(0);
-  });
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 main().catch((err) => {
-  console.error("Fatal error:", err);
+  log(`Fatal error: ${err}`);
   process.exit(1);
 });

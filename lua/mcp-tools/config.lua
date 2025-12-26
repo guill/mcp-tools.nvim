@@ -4,6 +4,7 @@ local M = {}
 ---@field command? string[] Command to run the bridge (auto-detected if nil)
 ---@field port? number Port to listen on (0 = OS assigns)
 ---@field log_level? "debug"|"info"|"warn"|"error"
+---@field log_file? string Optional path to log file for debugging
 
 ---@class MCPToolsConfig
 ---@field tools? {dap?: boolean, diagnostics?: boolean, lsp?: boolean, undo?: boolean}
@@ -27,6 +28,7 @@ M.defaults = {
     command = nil,
     port = 0,
     log_level = "info",
+    log_file = nil,
   },
   on_ready = nil,
   on_stop = nil,

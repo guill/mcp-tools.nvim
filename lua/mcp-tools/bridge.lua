@@ -73,9 +73,13 @@ function M.start(opts)
   M._on_stop = opts.on_stop
   M._stdout_buffer = {}
 
+  local config = require("mcp-tools.config")
+  local log_file = config.get("bridge.log_file")
+
   local env = vim.tbl_extend("force", vim.fn.environ(), {
     NVIM_LISTEN_ADDRESS = opts.nvim_socket,
     MCP_PORT = tostring(opts.port or 0),
+    MCP_LOG_FILE = log_file or "",
   })
 
   M._process = vim.system(cmd, {
@@ -100,10 +104,7 @@ function M.start(opts)
     stderr = function(_, data)
       if data and data:match("%S") then
         vim.schedule(function()
-          local config = require("mcp-tools.config")
-          if config.get("bridge.log_level") == "debug" then
-            vim.notify("[mcp-tools:bridge] " .. vim.trim(data), vim.log.levels.DEBUG)
-          end
+          vim.notify("[mcp-tools:bridge] " .. vim.trim(data), vim.log.levels.DEBUG)
         end)
       end
     end,
@@ -111,9 +112,6 @@ function M.start(opts)
     vim.schedule(function()
       if result.code ~= 0 and result.code ~= nil then
         vim.notify("[mcp-tools] Bridge exited with code " .. result.code, vim.log.levels.WARN)
-        if #M._stdout_buffer > 0 then
-          vim.notify("[mcp-tools] Bridge output: " .. table.concat(M._stdout_buffer, ""), vim.log.levels.DEBUG)
-        end
       end
       M._process = nil
       M._port = nil
