@@ -7,9 +7,10 @@ local M = {}
 ---@field log_file? string Optional path to log file for debugging
 
 ---@class MCPToolsConfig
----@field tools? {dap?: boolean, diagnostics?: boolean, lsp?: boolean, undo?: boolean}
+---@field tools? {dap?: boolean, diagnostics?: boolean, lsp?: boolean, undo?: boolean, test?: boolean}
 ---@field integrations? {opencode?: boolean}
 ---@field bridge? MCPToolsBridgeConfig
+---@field debug? boolean Enable verbose notifications
 ---@field on_ready? fun(port: number)
 ---@field on_stop? fun()
 
@@ -20,6 +21,7 @@ M.defaults = {
     diagnostics = false,
     lsp = false,
     undo = false,
+    test = false,
   },
   integrations = {
     opencode = false,
@@ -30,6 +32,7 @@ M.defaults = {
     log_level = "info",
     log_file = nil,
   },
+  debug = false,
   on_ready = nil,
   on_stop = nil,
 }

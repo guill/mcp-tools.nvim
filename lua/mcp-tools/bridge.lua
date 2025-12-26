@@ -1,5 +1,12 @@
 local M = {}
 
+local function debug_notify(msg, level)
+  local config = require("mcp-tools.config")
+  if config.get("debug") then
+    vim.notify(msg, level)
+  end
+end
+
 ---@type vim.SystemObj?
 M._process = nil
 
@@ -94,7 +101,7 @@ function M.start(opts)
       if port then
         M._port = tonumber(port)
         vim.schedule(function()
-          vim.notify("[mcp-tools] Bridge ready on port " .. M._port, vim.log.levels.INFO)
+          debug_notify("[mcp-tools] Bridge ready on port " .. M._port, vim.log.levels.INFO)
           if M._on_ready then
             M._on_ready(M._port)
           end
@@ -104,7 +111,7 @@ function M.start(opts)
     stderr = function(_, data)
       if data and data:match("%S") then
         vim.schedule(function()
-          vim.notify("[mcp-tools:bridge] " .. vim.trim(data), vim.log.levels.DEBUG)
+          debug_notify("[mcp-tools:bridge] " .. vim.trim(data), vim.log.levels.DEBUG)
         end)
       end
     end,

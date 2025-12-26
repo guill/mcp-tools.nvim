@@ -4,6 +4,13 @@ local M = {}
 
 M._subscribed = false
 
+local function debug_notify(msg, level)
+  local config = require("mcp-tools.config")
+  if config.get("debug") then
+    vim.notify(msg, level)
+  end
+end
+
 local function parse_mcp_response(stdout)
   if not stdout or stdout == "" then
     return nil, "Empty response"
@@ -87,16 +94,16 @@ local function register_with_opencode(opencode_url, mcp_port)
       local status, status_error = format_mcp_status(response)
 
       if status == "connected" then
-        vim.notify("[mcp-tools] Registered with OpenCode at " .. mcp_url, vim.log.levels.INFO)
+        debug_notify("[mcp-tools] Registered with OpenCode at " .. mcp_url, vim.log.levels.INFO)
       elseif status == "failed" then
         vim.notify(
           "[mcp-tools] OpenCode failed to connect to MCP bridge: " .. (status_error or "unknown"),
           vim.log.levels.ERROR
         )
       elseif status == "disabled" then
-        vim.notify("[mcp-tools] MCP server was disabled by OpenCode", vim.log.levels.WARN)
+        debug_notify("[mcp-tools] MCP server was disabled by OpenCode", vim.log.levels.WARN)
       else
-        vim.notify("[mcp-tools] MCP registration status: " .. status, vim.log.levels.DEBUG)
+        debug_notify("[mcp-tools] MCP registration status: " .. status, vim.log.levels.DEBUG)
       end
     end)
   end)

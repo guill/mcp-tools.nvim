@@ -27,6 +27,9 @@ function M.setup(opts)
   if config.get("tools.undo") then
     pcall(require, "mcp-tools.tools.undo")
   end
+  if config.get("tools.test") then
+    pcall(require, "mcp-tools.tools.test")
+  end
 
   if config.get("integrations.opencode") then
     local ok, opencode_integration = pcall(require, "mcp-tools.integrations.opencode")
