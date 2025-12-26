@@ -1,8 +1,11 @@
+-- Test tools for verifying MCP bridge functionality
+-- These tools are used to test async/sync execution patterns
 local registry = require("mcp-tools.registry")
 
+-- Tests asynchronous tool execution (callback deferred via vim.schedule)
 registry.register({
-  name = "multiple_choice_prompt",
-  description = "Prompt the user to select one option from a list of choices. Returns the selected option or nil if cancelled.",
+  name = "test_async_prompt",
+  description = "Test tool: Prompts user to select from choices (tests async callback execution)",
   args = {
     prompt = {
       type = "string",
@@ -33,11 +36,12 @@ registry.register({
   end,
 })
 
+-- Tests synchronous tool execution with NeoVim API calls
 registry.register({
-  name = "get_open_buffers",
-  description = "Get a list of all open buffers with their buffer numbers, file names, and metadata",
+  name = "test_sync_buffers",
+  description = "Test tool: Lists open buffers (tests sync callback with NeoVim API)",
   args = {},
-  execute = function(cb, args)
+  execute = function(cb, _)
     local buffers = {}
     for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
       if vim.api.nvim_buf_is_loaded(bufnr) then

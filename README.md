@@ -55,6 +55,7 @@ require("mcp-tools").setup({
     diagnostics = true, -- LSP diagnostics
     lsp = true,         -- LSP hover, symbols
     undo = true,        -- Undo tree
+    test = true,        -- Test tools (for development)
   },
 
   -- Enable/disable integrations (all default to false)
@@ -132,6 +133,15 @@ require("mcp-tools").setup({
 | Tool | Description |
 |------|-------------|
 | `nvim_undo_tree` | Get undo tree structure |
+
+### Test Tools (for development/debugging)
+
+These tools verify MCP bridge async/sync execution patterns:
+
+| Tool | Description |
+|------|-------------|
+| `nvim_test_async_prompt` | Tests async execution via user prompt |
+| `nvim_test_sync_buffers` | Tests sync execution via NeoVim API |
 
 ## Registering Custom Tools
 

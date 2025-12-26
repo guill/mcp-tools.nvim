@@ -37,7 +37,7 @@ debug sessions (DAP), LSP information, diagnostics, and undo history.
 
 Using lazy.nvim: >lua
     {
-      "your-username/mcp-tools.nvim",
+      "guill/mcp-tools.nvim",
       build = "cd bridge && npm install",
       config = function()
         require("mcp-tools").setup()
@@ -47,7 +47,7 @@ Using lazy.nvim: >lua
 
 Using packer.nvim: >lua
     use {
-      "your-username/mcp-tools.nvim",
+      "guill/mcp-tools.nvim",
       run = "cd bridge && npm install",
       config = function()
         require("mcp-tools").setup()
@@ -73,6 +73,7 @@ setup({opts})
         tools.diagnostics  (boolean)  Enable diagnostics tools (default: false)
         tools.lsp          (boolean)  Enable LSP tools (default: false)
         tools.undo         (boolean)  Enable undo tools (default: false)
+        tools.test         (boolean)  Enable test tools (default: false)
         integrations.opencode  (boolean)  Auto-register with OpenCode (default: false)
         bridge.port        (number)   Port for MCP server, 0 = auto (default: 0)
         bridge.log_level   (string)   Log level: debug|info|warn|error (default: info)
@@ -86,6 +87,7 @@ setup({opts})
             diagnostics = true, -- Enable diagnostics tools
             lsp = true,         -- Enable LSP tools
             undo = true,        -- Enable undo tools
+            test = true,        -- Enable test tools
           },
           integrations = {
             opencode = true,    -- Enable OpenCode auto-integration
@@ -148,6 +150,13 @@ DIAGNOSTICS TOOLS                                *mcp-tools-diagnostics-tools*
 UNDO TOOLS                                              *mcp-tools-undo-tools*
 
     nvim_undo_tree          Get undo tree structure
+
+TEST TOOLS (for development)                            *mcp-tools-test-tools*
+
+These tools verify MCP bridge async/sync execution patterns:
+
+    nvim_test_async_prompt  Tests async execution via user prompt
+    nvim_test_sync_buffers  Tests sync execution via NeoVim API
 
 ==============================================================================
 6. CUSTOM TOOLS                                           *mcp-tools-custom*

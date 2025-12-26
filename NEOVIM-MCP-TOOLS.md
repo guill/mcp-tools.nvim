@@ -268,18 +268,18 @@ mcp-tools.nvim/
 
 ```lua
 require('mcp-tools').setup({
-  -- Enable/disable built-in tools (default: all enabled)
+  -- Enable/disable built-in tools (default: all false)
   tools = {
     dap = true,           -- DAP debugging tools
     diagnostics = true,   -- LSP diagnostics
-    lsp = true,           -- LSP queries (references, definitions)
+    lsp = true,           -- LSP hover, symbols
     undo = true,          -- Undo tree inspection
+    test = true,          -- Test tools (for development)
   },
   
-  -- Enable/disable integrations (default: all enabled)
+  -- Enable/disable integrations (default: all false)
   integrations = {
     opencode = true,      -- OpenCode.nvim auto-registration
-    -- Future: claude_code = true, cursor = true, etc.
   },
   
   -- MCP bridge configuration
@@ -385,43 +385,74 @@ end
 
 Requires `nvim-dap` to be installed. Tools are only registered if DAP is available.
 
+**Session Management:**
+
 | Tool | Description | Arguments |
 |------|-------------|-----------|
 | `dap_status` | Get debug session status | none |
+| `dap_run` | Start a new debug session | `name`, `type`, `request`, `program?`, etc. |
+| `dap_terminate` | Terminate the current session | none |
+| `dap_disconnect` | Disconnect from debug adapter | `terminate_debuggee?` |
+
+**Execution Control:**
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `dap_continue` | Continue execution | `wait_until_paused?` |
+| `dap_step_over` | Step over | `wait_until_paused?` |
+| `dap_step_into` | Step into | `wait_until_paused?` |
+| `dap_step_out` | Step out | `wait_until_paused?` |
+| `dap_run_to` | Run to specific file and line | `filename`, `line`, `wait_until_paused?` |
+| `dap_wait_until_paused` | Wait until debugger pauses | `timeout_ms?` |
+
+**Breakpoints:**
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `dap_set_breakpoint` | Set breakpoint at file:line | `filename`, `line`, `condition?`, `hit_condition?`, `log_message?` |
+| `dap_remove_breakpoint` | Remove breakpoint at file:line | `filename`, `line` |
+| `dap_clear_breakpoints` | Clear all breakpoints | none |
+| `dap_breakpoints` | List all breakpoints | none |
+
+**Inspection:**
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
 | `dap_stacktrace` | Get current call stack | `thread_id?`, `levels?` |
 | `dap_scopes` | Get scopes for a stack frame | `frame_id` |
-| `dap_variables` | Get variables in a scope | `scope_id`, `filter?` |
+| `dap_variables` | Get variables in a scope | `variables_reference`, `filter?`, `start?`, `count?` |
 | `dap_evaluate` | Evaluate expression | `expression`, `frame_id?`, `context?` |
-| `dap_breakpoints` | List all breakpoints | `bufnr?` |
 | `dap_threads` | List all threads | none |
-| `dap_continue` | Continue execution | none |
-| `dap_step_over` | Step over | none |
-| `dap_step_into` | Step into | none |
-| `dap_step_out` | Step out | none |
+| `dap_current_location` | Get current location with code context | `context_lines?` |
+| `dap_program_output` | Get program stdout/stderr/console | `category?`, `lines?`, `include_metadata?` |
 
 ### Diagnostics Tools (`tools.diagnostics`)
 
 | Tool | Description | Arguments |
 |------|-------------|-----------|
 | `diagnostics_list` | Get diagnostics | `bufnr?`, `severity?` |
-| `diagnostics_at_cursor` | Get diagnostic at cursor | none |
 
 ### LSP Tools (`tools.lsp`)
 
 | Tool | Description | Arguments |
 |------|-------------|-----------|
-| `lsp_references` | Find references | `bufnr?`, `line?`, `col?` |
-| `lsp_definition` | Go to definition | `bufnr?`, `line?`, `col?` |
 | `lsp_hover` | Get hover info | `bufnr?`, `line?`, `col?` |
 | `lsp_symbols` | Document symbols | `bufnr?` |
-| `lsp_workspace_symbols` | Workspace symbols | `query` |
 
 ### Undo Tools (`tools.undo`)
 
 | Tool | Description | Arguments |
 |------|-------------|-----------|
 | `undo_tree` | Get undo tree structure | `bufnr?` |
-| `undo_diff` | Diff between undo states | `bufnr?`, `seq1`, `seq2` |
+
+### Test Tools (`tools.test`)
+
+Tools for verifying MCP bridge async/sync execution patterns:
+
+| Tool | Description | Arguments |
+|------|-------------|-----------|
+| `test_async_prompt` | Tests async execution via user prompt | `prompt`, `options` |
+| `test_sync_buffers` | Tests sync execution via NeoVim API | none |
 
 ## MCP Bridge Implementation
 
