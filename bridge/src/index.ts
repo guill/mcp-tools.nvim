@@ -18,7 +18,8 @@ const PORT = parseInt(process.env.MCP_PORT || "0");
 const LOG_FILE = process.env.MCP_LOG_FILE;
 const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN;
 const POLL_INTERVAL_MS = 100;
-const MAX_WAIT_MS = 300000;
+const TOOL_TIMEOUT_MS = parseInt(process.env.MCP_TOOL_TIMEOUT || "0") || 0;
+const UNLIMITED_TIMEOUT = 0;
 
 let logStream: fs.WriteStream | null = null;
 if (LOG_FILE) {
@@ -78,6 +79,7 @@ interface ExecuteResponse {
   task_id?: string;
   result?: unknown;
   error?: string;
+  timeout?: number;
 }
 
 interface GetResultResponse {
@@ -107,11 +109,14 @@ function formatError(error: string): CallToolResult {
 
 async function pollForResult(
   nvim: NeovimClient,
-  taskId: string
+  taskId: string,
+  toolTimeout?: number
 ): Promise<CallToolResult> {
   const startTime = Date.now();
+  const effectiveTimeout = toolTimeout !== undefined ? toolTimeout : TOOL_TIMEOUT_MS;
+  const hasTimeout = effectiveTimeout !== UNLIMITED_TIMEOUT;
 
-  while (Date.now() - startTime < MAX_WAIT_MS) {
+  while (!hasTimeout || Date.now() - startTime < effectiveTimeout) {
     const response = (await nvim.call("luaeval", [
       `require('mcp-tools.registry').get_result(_A)`,
       taskId,
@@ -132,7 +137,7 @@ async function pollForResult(
     taskId,
   ]);
 
-  return formatError(`Timeout after ${MAX_WAIT_MS}ms waiting for tool result`);
+  return formatError(`Timeout after ${effectiveTimeout}ms waiting for tool result`);
 }
 
 function createMcpServer(nvim: NeovimClient): Server {
@@ -203,8 +208,8 @@ function createMcpServer(nvim: NeovimClient): Server {
         }
 
         if (response.pending && response.task_id) {
-          log(`Tool running async, polling task: ${response.task_id}`);
-          return await pollForResult(nvim, response.task_id);
+          log(`Tool running async, polling task: ${response.task_id} (timeout: ${response.timeout ?? TOOL_TIMEOUT_MS}ms)`);
+          return await pollForResult(nvim, response.task_id, response.timeout);
         }
 
         return formatError("Unexpected response from tool execution");

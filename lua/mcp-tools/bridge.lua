@@ -112,11 +112,14 @@ function M.start(opts)
 
   M._auth_token = generate_auth_token()
 
+  local tool_timeout = config.get("bridge.tool_timeout")
+
   local env = vim.tbl_extend("force", vim.fn.environ(), {
     NVIM_LISTEN_ADDRESS = opts.nvim_socket,
     MCP_PORT = tostring(opts.port or 0),
     MCP_LOG_FILE = log_file or "",
     MCP_AUTH_TOKEN = M._auth_token,
+    MCP_TOOL_TIMEOUT = tostring(tool_timeout or 0),
   })
 
   M._process = vim.system(cmd, {

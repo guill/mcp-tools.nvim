@@ -11,6 +11,7 @@ local M = {}
 ---@field description string
 ---@field args table<string, MCPToolArg>
 ---@field execute fun(cb: fun(result: any, err?: string), args: table)
+---@field timeout? number
 
 ---@type table<string, MCPToolDef>
 M._tools = {}
@@ -35,6 +36,7 @@ function M.register(tool)
     description = tool.description,
     args = tool.args or {},
     execute = tool.execute,
+    timeout = tool.timeout,
   }
 end
 
@@ -138,7 +140,7 @@ function M.execute(name, args)
     return { done = true, result = sync_result.result, error = sync_result.error }
   else
     M._pending_tasks[task_id] = { done = false }
-    return { pending = true, task_id = task_id }
+    return { pending = true, task_id = task_id, timeout = tool.timeout }
   end
 end
 

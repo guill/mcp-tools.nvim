@@ -5,9 +5,10 @@ local M = {}
 ---@field port? number Port to listen on (0 = OS assigns)
 ---@field log_level? "debug"|"info"|"warn"|"error"
 ---@field log_file? string Optional path to log file for debugging
+---@field tool_timeout? number Tool execution timeout in ms (0 = unlimited)
 
 ---@class MCPToolsConfig
----@field tools? {dap?: boolean, diagnostics?: boolean, lsp?: boolean, undo?: boolean, test?: boolean}
+---@field tools? {dap?: boolean, diagnostics?: boolean, lsp?: boolean, undo?: boolean, test?: boolean, interview?: boolean}
 ---@field integrations? {opencode?: boolean}
 ---@field bridge? MCPToolsBridgeConfig
 ---@field debug? boolean Enable verbose notifications
@@ -22,6 +23,7 @@ M.defaults = {
     lsp = false,
     undo = false,
     test = false,
+    interview = false,
   },
   integrations = {
     opencode = false,
@@ -31,6 +33,7 @@ M.defaults = {
     port = 0,
     log_level = "info",
     log_file = nil,
+    tool_timeout = 300000,
   },
   debug = false,
   on_ready = nil,
