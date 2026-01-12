@@ -7,6 +7,7 @@ A NeoVim plugin that exposes Lua functions as MCP (Model Context Protocol) tools
 - **DAP Integration**: Inspect debug sessions, call stacks, variables, and evaluate expressions
 - **LSP Tools**: Query hover info, document symbols, and diagnostics
 - **Undo Tree**: Inspect undo history
+- **Interview Tool**: AI can ask users multiple-choice or free-text questions via a native NeoVim UI
 - **OpenCode Auto-Integration**: Automatically registers with OpenCode when it starts
 - **Custom Tools**: Register your own Lua functions as MCP tools
 
@@ -15,6 +16,7 @@ A NeoVim plugin that exposes Lua functions as MCP (Model Context Protocol) tools
 - NeoVim 0.9+
 - One of: [bun](https://bun.sh/) or Node.js 18+ with npx
 - Optional: [nvim-dap](https://github.com/mfussenegger/nvim-dap) for debug tools
+- Optional: [nui-components.nvim](https://github.com/grapp-dev/nui-components.nvim) for interview tool
 - Optional: [opencode.nvim](https://github.com/sudo-tee/opencode.nvim) for auto-integration
 
 ## Installation
@@ -55,6 +57,7 @@ require("mcp-tools").setup({
     diagnostics = true, -- LSP diagnostics
     lsp = true,         -- LSP hover, symbols
     undo = true,        -- Undo tree
+    interview = true,   -- Interview tool (requires nui-components.nvim)
     test = true,        -- Test tools (for development)
   },
 
@@ -142,6 +145,14 @@ These tools verify MCP bridge async/sync execution patterns:
 |------|-------------|
 | `nvim_test_async_prompt` | Tests async execution via user prompt |
 | `nvim_test_sync_buffers` | Tests sync execution via NeoVim API |
+
+### Interview Tool (requires nui-components.nvim)
+
+Allows AI assistants to ask users questions via a native NeoVim floating window UI. Supports single-select, multi-select, and free-text questions.
+
+| Tool | Description |
+|------|-------------|
+| `nvim_interview` | Present questions with multiple-choice options or free-text input |
 
 ## Registering Custom Tools
 
