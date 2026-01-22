@@ -9,7 +9,7 @@ local M = {}
 
 ---@class MCPToolsConfig
 ---@field tools? {dap?: boolean, diagnostics?: boolean, lsp?: boolean, undo?: boolean, test?: boolean, interview?: boolean}
----@field integrations? {opencode?: boolean}
+---@field integrations? {opencode?: boolean, ampcode?: boolean}
 ---@field bridge? MCPToolsBridgeConfig
 ---@field debug? boolean Enable verbose notifications
 ---@field on_ready? fun(port: number)
@@ -27,6 +27,7 @@ M.defaults = {
   },
   integrations = {
     opencode = false,
+    ampcode = false,
   },
   bridge = {
     command = nil,

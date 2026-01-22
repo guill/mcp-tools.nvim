@@ -9,6 +9,7 @@ A NeoVim plugin that exposes Lua functions as MCP (Model Context Protocol) tools
 - **Undo Tree**: Inspect undo history
 - **Interview Tool**: AI can ask users multiple-choice or free-text questions via a native NeoVim UI
 - **OpenCode Auto-Integration**: Automatically registers with OpenCode when it starts
+- **Ampcode Integration**: Launch Amp CLI with MCP tools via `:AmpStartWithMCP`
 - **Custom Tools**: Register your own Lua functions as MCP tools
 
 ## Requirements
@@ -18,6 +19,7 @@ A NeoVim plugin that exposes Lua functions as MCP (Model Context Protocol) tools
 - Optional: [nvim-dap](https://github.com/mfussenegger/nvim-dap) for debug tools
 - Optional: [nui-components.nvim](https://github.com/grapp-dev/nui-components.nvim) for interview tool
 - Optional: [opencode.nvim](https://github.com/sudo-tee/opencode.nvim) for auto-integration
+- Optional: [amp](https://ampcode.com/) CLI for Ampcode integration
 
 ## Installation
 
@@ -64,6 +66,7 @@ require("mcp-tools").setup({
   -- Enable/disable integrations (all default to false)
   integrations = {
     opencode = true, -- Auto-register with OpenCode
+    ampcode = true,  -- Enable :AmpStartWithMCP command
   },
 
   -- Bridge configuration
@@ -212,6 +215,23 @@ mcp.register({
 })
 ```
 
+## Integrations
+
+### OpenCode
+
+When `integrations.opencode = true`, the plugin automatically detects when OpenCode starts and registers the MCP server with it. No manual steps required.
+
+### Ampcode
+
+When `integrations.ampcode = true`, the plugin provides the `:AmpStartWithMCP` command which:
+
+1. Starts the MCP bridge (or reuses existing one if already running)
+2. Opens a NeoVim terminal with `amp --ide --mcp-config <config>`
+
+The MCP config is passed via a temp file and merges with your existing Amp settings (won't overwrite `.amp/settings.json`).
+
+Both integrations can be enabled simultaneously and share the same MCP bridge.
+
 ## Manual Bridge Control
 
 ```lua
@@ -243,11 +263,14 @@ Run `:checkhealth mcp-tools` to verify your installation.
 
 ## How It Works
 
-1. When OpenCode starts, this plugin detects it via `opencode.state.subscribe`
-2. Plugin spawns a TypeScript MCP bridge that connects to NeoVim via RPC
-3. Plugin registers the MCP server with OpenCode via `POST /mcp`
-4. OpenCode discovers tools via MCP `tools/list`
-5. When OpenCode calls a tool, the bridge invokes Lua via `nvim.call('luaeval', ...)`
+1. Plugin spawns a TypeScript MCP bridge that connects to NeoVim via RPC
+2. The bridge exposes tools via the MCP protocol (Streamable HTTP transport)
+3. AI assistants discover tools via MCP `tools/list`
+4. When a tool is called, the bridge invokes Lua via `nvim.call('luaeval', ...)`
+
+**OpenCode flow:** Plugin detects OpenCode via `opencode.state.subscribe` and registers automatically via `POST /mcp`.
+
+**Ampcode flow:** User runs `:AmpStartWithMCP`, which opens a terminal with Amp configured to connect to the bridge.
 
 ## Architecture
 
@@ -259,8 +282,10 @@ NeoVim Instance
 │       ├── Connects to NeoVim via socket
 │       ├── Exposes tools via MCP protocol
 │       └── Routes tool calls back to Lua
-└── opencode.nvim
-    └── Discovers nvim-tools MCP server
+├── opencode.nvim (optional)
+│   └── Auto-discovers nvim-tools MCP server
+└── Amp terminal (optional, via :AmpStartWithMCP)
+    └── Connects to nvim-tools MCP server
 ```
 
 ## License

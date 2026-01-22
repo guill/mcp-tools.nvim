@@ -40,6 +40,13 @@ function M.setup(opts)
       opencode_integration.setup()
     end
   end
+
+  if config.get("integrations.ampcode") then
+    local ok, ampcode_integration = pcall(require, "mcp-tools.integrations.ampcode")
+    if ok then
+      ampcode_integration.setup()
+    end
+  end
 end
 
 ---@param tool MCPToolDef
