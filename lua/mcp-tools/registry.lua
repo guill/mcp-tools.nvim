@@ -5,6 +5,9 @@ local M = {}
 ---@field description string
 ---@field required? boolean
 ---@field default? any
+---@field items? table
+---@field properties? table
+
 
 ---@class MCPToolDef
 ---@field name string

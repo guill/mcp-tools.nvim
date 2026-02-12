@@ -9,6 +9,16 @@ registry.register({
   args = {
     questions = {
       type = "array",
+      items = {
+        type = "object",
+        properties = {
+          question = { type = "string", description = "The question text" },
+          choices = { type = "array", items = { type = "string" }, description = "If omitted, question is text-only" },
+          multiselect = { type = "boolean", description = "Allow multiple selections (default false)" },
+          default_choice = { type = "number", description = "0-based index of default selected choice" },
+        },
+        required = { "question" },
+      },
       description = "Array of question objects. Each object has: "
         .. "'question' (string, required) - the question text; "
         .. "'choices' (array of strings, optional) - if omitted, question is text-only; "

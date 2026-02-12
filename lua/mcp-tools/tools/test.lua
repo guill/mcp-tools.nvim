@@ -14,6 +14,7 @@ registry.register({
     },
     options = {
       type = "array",
+      items = { type = "string" },
       description = "Array of string options for the user to choose from",
       required = true,
     },

@@ -65,6 +65,9 @@ interface ToolArg {
   description: string;
   required?: boolean;
   default?: unknown;
+  items?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
+
 }
 
 interface ToolDef {
@@ -166,14 +169,23 @@ function createMcpServer(nvim: NeovimClient): Server {
       inputSchema: {
         type: "object" as const,
         properties: Object.fromEntries(
-          Object.entries(def.args).map(([argName, argDef]) => [
-            argName,
-            {
+          Object.entries(def.args).map(([argName, argDef]) => {
+            const schema: Record<string, unknown> = {
               type: argDef.type,
               description: argDef.description,
-              default: argDef.default,
-            },
-          ])
+            };
+            if (argDef.default !== undefined) {
+              schema.default = argDef.default;
+            }
+            if (argDef.type === "array") {
+              schema.items = argDef.items ?? {};
+            }
+            if (argDef.type === "object" && argDef.properties) {
+              schema.properties = argDef.properties;
+            }
+
+            return [argName, schema];
+          })
         ),
         required: Object.entries(def.args)
           .filter(([_, d]) => d.required)

@@ -415,7 +415,7 @@ registry.register({
     request = { type = "string", description = "Request type: 'launch' or 'attach'", required = true },
     name = { type = "string", description = "Configuration name", required = true },
     program = { type = "string", description = "Program to debug. Use '${file}' for current file or '${workspaceFolder}' for cwd", required = false },
-    args = { type = "array", description = "Program arguments as JSON array", required = false },
+    args = { type = "array", items = { type = "string" }, description = "Program arguments as JSON array", required = false },
     cwd = { type = "string", description = "Working directory. Use '${workspaceFolder}' for cwd", required = false },
     env = { type = "object", description = "Environment variables as JSON object", required = false },
     host = { type = "string", description = "Host to connect to (for attach requests)", required = false },
