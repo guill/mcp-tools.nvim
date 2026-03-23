@@ -124,6 +124,10 @@ local function start_bridge_when_ready(server)
       return
     end
 
+    if bridge.is_running() then
+      return
+    end
+
     bridge.start({
       nvim_socket = vim.v.servername,
       on_ready = function(port)
@@ -155,7 +159,10 @@ function M.setup()
 
   M._subscribed = true
 
-  opencode_state.subscribe("opencode_server", function(_, server, prev)
+  -- state.store.subscribe is the new API after the state refactor (#321)
+  -- Falls back to state.subscribe for older versions of opencode.nvim
+  local subscribe = opencode_state.store and opencode_state.store.subscribe or opencode_state.subscribe
+  subscribe("opencode_server", function(_, server, prev)
     if server then
       start_bridge_when_ready(server)
     elseif prev and not server then
